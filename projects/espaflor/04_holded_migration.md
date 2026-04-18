@@ -1,4 +1,4 @@
-<!-- v: 1 | updated: 2026-04-18T15:45Z -->
+<!-- v: 2 | updated: 2026-04-18T20:00Z -->
 # 04. Миграция из Holded
 
 Статус: 🟢 **PROD** (категории + 1983 товара + фото) / 🟡 **READY** (albaran импорт начат, основной прогон впереди).
@@ -109,7 +109,8 @@ Odoo сам выстраивает дерево.
 | `x_studio_codigo_fabrica` | Значение из Holded |
 | `x_studio_holded_url` | Ссылка на Holded |
 
-### Purchase line import (для albaran→pedido)
+### Purchase line import: albaran → pedido
+<a id="purchase-line-import-albaran--pedido"></a>
 
 **Критично:** для строк заказа Odoo принимает **только** `product.product` External ID, **не** template.
 

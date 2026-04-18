@@ -1,4 +1,4 @@
-<!-- v: 4 | updated: 2026-04-18T18:15Z -->
+<!-- v: 5 | updated: 2026-04-18T20:00Z -->
 # CHANGELOG
 
 Журнал всех изменений в системе Espafloria Odoo + Make.com автоматизации.
@@ -7,6 +7,65 @@
 - После **любого** изменения — запись сюда
 - Формат: дата + автор + сущность + что изменили + связанная задача/документ
 - Сверху — самые свежие
+
+---
+
+## 2026-04-18 — Base Polish session (worker, свежий чат)
+
+### Задача
+Пересобрать базу знаний после уставшего длинного чата (сессия 4). Audit показал 5 CRITICAL + 13 MINOR + рекомендации. Owner одобрил применение и попросил переделать SHA-based sync на **version-based** (меньше overhead, нет circular dependency с двумя коммитами).
+
+### Протокол sync — переработан
+- **Было:** `SYNC_STATE.md` хранил `base_commit` / `latest_commit` (SHA). Обновление после push требовало второй commit; `latest_commit` физически не мог ссылаться на сам себя — всегда отставал на 1 коммит.
+- **Стало:** sync-маркер = `v` у `VERSIONS.md`. Любая правка → bump `v` у VERSIONS.md. Новый чат сравнивает `v` в Project и GitHub; совпало → синк.
+
+### Протокол worker'а — добавлен commit gate
+- **Было:** worker коммитил автоматически в конце сессии.
+- **Стало:** worker готовит правки в sandbox, обновляет версии, выдаёт Owner'у **handoff-блок** (status: `ready for review`). Commit — только по явной команде Owner'а («commit»). До этого момента push'а не происходит. Owner может запросить правки — worker их вносит в том же чате без промежуточных коммитов.
+- **Handoff-формат** стандартизирован: файлы с новыми `v`, key decisions для Orchestrator'а, open questions. Owner copy-paste'ит handoff в orchestrator-чат.
+- **CHANGELOG.md** — не отдельный канал передачи, а обязательная часть работы worker'а. Orchestrator, который стартует позже, читает свежую запись как часть базы.
+- **Self-ID.** Briefing'и теперь просят worker'а в первом сообщении зафиксировать `role / task / started / VERSIONS.md v` — чтобы Owner сразу видел, с какой версии базы работает конкретный worker.
+
+См. [SYNC_STATE.md v3](SYNC_STATE.md), [12_ai_workflow.md v2](12_ai_workflow.md).
+
+### Done (CRITICAL из Audit)
+
+- **README.md (v1→v2)**: в «📚 Структура репозитория» добавлены `12_ai_workflow.md` и `SYNC_STATE.md` (раньше отсутствовали в дереве, хотя существуют в репо). Добавлена строка про version-based sync check.
+- **08_current_state_snapshot.md (v1→v2)**:
+  - `purchase.order.line` — заголовок исправлен «6 полей» → «5 полей» (по таблице), добавлена пометка для сверки с прод при необходимости.
+  - `product.template + product.product` — «8 парных полей» → «7 парных + 3 variant-only» (по факту таблицы).
+- **02_makecom_bot.md (v2→v3)**: раздел «Промпты — source of truth» переписан под реальное состояние. Теперь три места: Make.com prod (SoT), `prompts/` в репо (снапшот), `/mnt/project/` (upload в Claude). Убраны отсылки на несуществующие файлы `prompt_3_*`, `prompt_149_*`, `prompt_167_*`.
+- **00_source_files_index.md (v1→v2)**: раздел с prompts переписан — фактические имена `prompt_ocr_v1.txt`, `prompt_reconciliation_v3_5.txt`, `prompt_diagnostics_v3_1.txt`. Таблица «хранить vs выбросить» обновлена.
+- **09_open_work.md (v2→v3)**: три заголовка `## P3` объединены в единый `## P3 — Новые workstreams` с подразделами P3.1..P3.5 (CRM, Flowwow, Glovo, Catch-weight, Бухгалтерия). Два `## P4` → `## P4 — Долгосрочное` с P4.1..P4.3. Пункт про `x_studio_legacy_source` в Deprecated переформулирован под фактическое состояние (поле существует, но action 1145 его не заполняет на source-side).
+
+### Done (MINOR из Audit)
+
+- **00_master_index.md (v4→v5)**:
+  - Финальная строка «файлах 01-09» → «01-12».
+  - Глоссарий дополнен терминами `VERSIONS.md`, `v в header`, `Sync` (нужны для version-based протокола).
+  - PDF `FLOR-gov` помечен как внешний / upload по запросу.
+- **07_infrastructure_devops.md (v1→v2)**: в таблицу MCP / integrations добавлены GitHub MCP и Odoo MCP (реально используются), остальные снабжены статусом использования. Добавлено правило «в начале сессии tool_search», не полагаться на статический список.
+- **10_vision_and_roadmap.md (v2→v3)**: в таблицу roadmap добавлена строка «Параллельно (фон, с MVP) — 11.5 CRM».
+- **04_holded_migration.md (v1→v2)**: заголовок `### Purchase line import (для albaran→pedido)` переработан — убран символ `→`, добавлен stable HTML anchor для ссылок из 00_source_files_index.
+- **01_business_context.md (v1→v2)**: добавлена cross-ref заметка про `warehouse_id=2` на всех 3 POS (связан с TODO в 05 и snapshot в 08).
+- **SYNC_STATE.md (v2→v3)**: переписан полностью под version-based (см. выше).
+- **12_ai_workflow.md (v1→v2)**: исправлен счёт файлов в Briefing Reviewer (14 → 19 md при пересчёте через VERSIONS.md). Briefing Initial (17 → 19). Протокол синхронизации переписан с `github_sha` на `VERSIONS.md v`. Добавлена явная «Состав базы знаний» секция (19 файлов) как anti-drift якорь.
+
+### Не трогал
+- `03_odoo_receipt_review.md` (v1) — без изменений
+- `05_florists_logistics_accountant.md` (v2) — без изменений
+- `06_catalog_migration_toolkit.md` (v1) — без изменений
+- `11_crm_and_customers.md` (v1) — без изменений
+- `99_invariants.md` (v2) — без изменений (Owner не давал approve на правки инвариантов)
+
+### Pending из предыдущих сессий (перенесены)
+
+Из session 3 CHANGELOG, всё ещё актуально на момент Base Polish:
+- [ ] Добавить `qty_received` + `qty_invoiced` на форму `purchase.order.line` (Studio, 2 минуты)
+- [ ] Удалить физически `x_studio_many2many_field_4qh_1jkvk330u` через Studio UI
+- [ ] Тестовая миграция 1 карточки + проверка копирования supplierinfo
+
+Зафиксировано в [09_open_work.md § P0](09_open_work.md#p0--блокирует-запуск-20-апреля).
 
 ---
 

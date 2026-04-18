@@ -1,4 +1,4 @@
-<!-- v: 4 | updated: 2026-04-18T18:10Z -->
+<!-- v: 5 | updated: 2026-04-18T20:00Z -->
 # Master Context — Espafloria Odoo Automation
 
 **Last updated:** 2026-04-18
@@ -88,6 +88,9 @@
 | **Карантин Holded** | Категория `⛔ Карантин Holded` (id=207) — все импортированные карточки |
 | **Target variant** | Новая карточка-вариант, в которую мигрирует карантинная (`x_studio_target_variant`) |
 | **Sentinel -1** | Значение `quantity = -1` = «штуки не пересчитаны флористом», отличать от `0` (реально ничего не приехало) |
+| **VERSIONS.md** | Сводная таблица «файл → v → updated». Версия в header этого файла = маркер состояния всей базы (version-based sync, см. `SYNC_STATE.md`) |
+| **`v` в header** | `<!-- v: N | updated: ... -->` в первой строке каждого `.md`. Bump'ается при каждой значимой правке |
+| **Sync** | База в Claude Project совпадает по `v` у `VERSIONS.md` с GitHub. Если нет — Owner перезаливает |
 
 ---
 
@@ -109,7 +112,7 @@
 | Google Sheets: products | https://docs.google.com/spreadsheets/d/1ep4WA5ciu2R1-mVx9Ish2dGH1s9kdjVECGkkGBCsBaE | ETL справочник Holded→Odoo |
 | Google Sheets: albaran | https://docs.google.com/spreadsheets/d/1apNcpf7-44OGQVb39wNfZBU7INv3iyTGEFsZVOvH_58 | ETL для albaran→pedido |
 | Регламент сотрудников | Google Doc (29 MB, Holded-based) | Ждёт переработки под Odoo |
-| PDF: ChatGPT про испанский план счетов | `FLOR-gov_-_Odoo_и_испанскии__план_счетов__1_.pdf` | 226 стр, raw research |
+| PDF: ChatGPT про испанский план счетов | `FLOR-gov_-_Odoo_и_испанскии__план_счетов__1_.pdf` (внешний, по запросу) | 226 стр, raw research — не в Project knowledge, загружается точечно |
 
 ---
 
@@ -123,4 +126,4 @@
 
 ---
 
-**Подробности по каждому блоку — в файлах 01-09.**
+**Подробности по каждому блоку — в файлах 01-12.**

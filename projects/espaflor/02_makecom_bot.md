@@ -1,4 +1,4 @@
-<!-- v: 2 | updated: 2026-04-18T16:40Z -->
+<!-- v: 3 | updated: 2026-04-18T20:00Z -->
 # 02. Make.com Telegram Bot
 
 Статус: 🟢 **PROD** — работает, обрабатывает 188+ pedido.
@@ -20,14 +20,20 @@
 
 ### Промпты — source of truth
 
-Production-промпты хранятся в **двух** местах:
-- **Claude Project knowledge** (`/mnt/project/`) — оригинальные файлы: `prompt_3_*`, `prompt_149_*`, `prompt_167_*`. Source of truth.
-- **`prompts/` в этой базе знаний** — копии для self-contained reference.
+Production-промпты живут в **трёх** местах, которые должны обновляться согласованно:
 
-**При изменении промпта** — обновляются **оба места**:
-1. В Project knowledge (вы загружаете новую версию через UI)
-2. В `prompts/` этой папки (обновляется через Claude / вручную)
-3. В OpenAI модуле в Make.com сценарии (production)
+| Место | Файл | Роль |
+|---|---|---|
+| **Make.com scenario (prod)** | модули 3 / 149 / 167 | То, что реально выполняется. Если правишь здесь — prod идёт новым промптом сразу. |
+| **`prompts/` в этом репо** | `prompt_ocr_v1.txt`, `prompt_reconciliation_v3.5.txt`, `prompt_diagnostics_v3.1.txt` | Долгосрочный снапшот для diff между версиями. |
+| **Claude Project knowledge** | `prompt_ocr_v1.txt`, `prompt_reconciliation_v3_5.txt`, `prompt_diagnostics_v3_1.txt` | Upload для self-contained reference в чате. Подчёркивания вместо точек — особенность Project upload. |
+
+**При изменении промпта** — обновляются **все три**:
+1. В Make.com UI (это применяется к prod сразу)
+2. В `prompts/` репо (commit)
+3. В Project knowledge (Owner перезаливает)
+
+Если синхронизация отстала — prod работает правильно, но новые AI-чаты будут обсуждать старый промпт. Это главный риск рассинхрона.
 
 ### Правило диагностики
 

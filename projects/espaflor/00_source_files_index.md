@@ -1,4 +1,4 @@
-<!-- v: 1 | updated: 2026-04-18T15:55Z -->
+<!-- v: 2 | updated: 2026-04-18T20:00Z -->
 # 00. Source Files Index
 
 Карта всех **исходных файлов** проекта — откуда берётся информация в Master Context.
@@ -30,32 +30,27 @@
 **Переработано в:** [02_makecom_bot.md](02_makecom_bot.md) (финальная версия с фактическими модулями и IDs)
 **Нужен ли?** Можно удалить — содержимое поглощено. Держим на случай аудита истории решений.
 
-### `prompt_3_распознаем_бумагу.txt`
+### Prompts — OpenAI system prompts для бота
 
-**Что:** System prompt для OpenAI модуля 3 (OCR-экстрактор).
-**Роль:** Первая LLM-стадия бота — парсит фото/PDF поставщицкого документа в STRICT JSON.
-**Модель:** `gpt-5.4-mini`, T=0.2, max_tokens=4048
-**Состояние:** 🟢 **PROD**
-**Копия:** `prompts/prompt_ocr_v1.txt` (идентична)
-**Переработано в:** [02_makecom_bot.md § OCR Extractor](02_makecom_bot.md#ocr-extractor-prompt-3)
+**Фактическое состояние хранения:**
 
-### `prompt_149_Сравниваем_бумагу_с_pedido.txt`
+| Файл в Project (`/mnt/project/`) | Назначение | Модуль в Make.com | Копия в репо |
+|---|---|---|---|
+| `prompt_ocr_v1.txt` | OCR extractor — парсит фото/PDF бумаги поставщика в STRICT JSON | модуль 3 (`gpt-5.4-mini`, T=0.2, max_tokens=4048) | `prompts/prompt_ocr_v1.txt` |
+| `prompt_reconciliation_v3_5.txt` | Reconciliation engine — сопоставляет бумагу с pedido, выбирает action | модуль 149 (`gpt-5.4`, T=0, max_tokens=4500) | `prompts/prompt_reconciliation_v3.5.txt` |
+| `prompt_diagnostics_v3_1.txt` | Diagnostics — формирует русский отчёт по pedido в Telegram + chatter | модуль 167 (`gpt-5.4-mini`, T=0.2, max_tokens=1200) | `prompts/prompt_diagnostics_v3.1.txt` |
 
-**Что:** System prompt для модуля 149 — **Reconciliation engine v3.5**.
-**Роль:** LLM-ядро бота — сопоставляет бумагу с существующим pedido, выбирает action (update_price / no_action / manual_review).
-**Модель:** `gpt-5.4`, T=0, max_tokens=4500
-**Состояние:** 🟢 **PROD**
-**Копия:** `prompts/prompt_reconciliation_v3.5.txt`
-**Переработано в:** [02_makecom_bot.md § Reconciliation Engine v3.5](02_makecom_bot.md#reconciliation-engine-v35-prompt-149)
+**Source of truth — где живёт каноническая версия промпта:**
+1. **Production Make.com scenario** — то, что реально выполняется. Если промпт в коде редактируется в Make.com UI, а `prompts/` в репо не обновлён — prod работает, документация отстала.
+2. **`prompts/` в этом репо** — долгосрочный снапшот, который можно diff'ать между версиями.
+3. `/mnt/project/prompt_*_v*.txt` — upload'ы в Claude Project knowledge для self-contained reference в чате. Обычно синхронизируются Owner'ом вручную после правки в Make.com.
 
-### `prompt_167_что_подозрительного_.txt`
+**При изменении промпта — обновлять все три места.** Иначе новый worker будет работать с устаревшей версией.
 
-**Что:** System prompt для модуля 167 — **Diagnostics v3.1**.
-**Роль:** Формирует короткий русскоязычный отчёт по pedido после всех апдейтов → в Telegram и в chatter.
-**Модель:** `gpt-5.4-mini`, T=0.2, max_tokens=1200
-**Состояние:** 🟢 **PROD**
-**Копия:** `prompts/prompt_diagnostics_v3.1.txt`
-**Переработано в:** [02_makecom_bot.md § Diagnostics v3.1](02_makecom_bot.md#diagnostics-v31-prompt-167)
+**Переработано в:**
+- [02_makecom_bot.md § OCR Extractor](02_makecom_bot.md#ocr-extractor-prompt-3)
+- [02_makecom_bot.md § Reconciliation Engine v3.5](02_makecom_bot.md#reconciliation-engine-v35-prompt-149)
+- [02_makecom_bot.md § Diagnostics v3.1](02_makecom_bot.md#diagnostics-v31-prompt-167)
 
 ---
 
@@ -91,7 +86,7 @@
 **Что:** ETL для albaran → pedido. Lookup product.product External ID по SKU, tax mapping для строк заказа.
 **URL:** https://docs.google.com/spreadsheets/d/1apNcpf7-44OGQVb39wNfZBU7INv3iyTGEFsZVOvH_58
 **Состояние:** 🟢 **PROD**
-**Переработано в:** [04_holded_migration.md § Purchase line import](04_holded_migration.md#purchase-line-import-для-albaran-pedido)
+**Переработано в:** [04_holded_migration.md § Purchase line import](04_holded_migration.md#purchase-line-import-albaran--pedido)
 **Когда использовать:** при массовом импорте albaran за 2026 (запланировано на 21 апреля).
 
 ---
@@ -140,8 +135,8 @@
 | Файл | Действие | Почему |
 |---|---|---|
 | `Integration_Telegram_Bot_blueprint__22_.json` | 🟢 Хранить | Production truth, обновляется при правках scenario |
-| `prompt_*.txt` (3 шт) | 🟢 Хранить | Production prompts, копии также в `prompts/` |
+| `prompt_ocr_v1.txt` / `prompt_reconciliation_v3_5.txt` / `prompt_diagnostics_v3_1.txt` | 🟢 Хранить | Production prompts, копии также в `prompts/` |
 | `02_makecom_bot_brief.md` | 🟡 Можно удалить | Устаревший draft, поглощён в 02_makecom_bot.md |
-| FLOR-gov PDF | 🟢 Хранить | Reference для compliance, читается точечно |
+| FLOR-gov PDF | 🟢 Хранить (внешне) | Reference для compliance, читается точечно, upload по запросу |
 | Регламент Google Doc | 🟢 Хранить | Исторический документ + основа для переработки |
 | Google Sheets (2 шт) | 🟢 Хранить | Living ETL tools, используются при импорте |

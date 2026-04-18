@@ -1,4 +1,4 @@
-<!-- v: 1 | updated: 2026-04-18T15:45Z -->
+<!-- v: 2 | updated: 2026-04-18T20:00Z -->
 # 08. Current State Snapshot
 
 **Дата:** 2026-04-18 (после hot-fix session)
@@ -26,7 +26,7 @@
 
 ## Кастомные поля (после hot-fix)
 
-### `purchase.order.line` — **6 полей**
+### `purchase.order.line` — **5 полей**
 | Поле | Тип |
 |---|---|
 | `x_studio_expected_qty` | float |
@@ -36,6 +36,8 @@
 | `x_studio_supplier_sku` | char |
 
 **Удалено:** `x_studio_expected_qty_2` (мусорное, «expected_qtyыыыы»).
+
+> ℹ️ Счёт по документации на 2026-04-18 после hot-fix. Если фактически в Odoo 6 полей — отдельный worker со сверкой через Odoo MCP обновит.
 
 ### `stock.move` — **9 полей**
 | Поле | Тип | Related/Compute |
@@ -52,7 +54,7 @@
 
 **Удалено:** `x_studio_received_units`, `x_studio_expected_quantity`, `x_studio_supplier_unit` (дубли).
 
-### `product.template` + `product.product` — **8 парных полей**
+### `product.template` + `product.product` — **7 парных + 3 variant-only**
 | Поле | Tmpl | Variant (related) | Назначение |
 |---|---|---|---|
 | `x_studio_codigo_fabrica` | ✅ | ✅ | Legacy supplier code from Holded |

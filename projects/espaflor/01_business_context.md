@@ -1,4 +1,4 @@
-<!-- v: 1 | updated: 2026-04-18T15:45Z -->
+<!-- v: 2 | updated: 2026-04-18T20:00Z -->
 # 01. Бизнес-контекст
 
 ## Компания
@@ -17,6 +17,8 @@
 - POS Plaza (id=1)
 - POS Gloria (id=2)
 - POS Blau (id=3)
+
+> ⚠️ Все 3 POS в current snapshot привязаны к `warehouse_id=2` (Plaza). Намеренно это или конфигурационная ошибка — не решено, см. TODO в [05_florists_logistics_accountant.md § TODO перед запуском MVP](05_florists_logistics_accountant.md#todo-перед-запуском-mvp-20-апреля) и [08_current_state_snapshot.md](08_current_state_snapshot.md).
 
 **Валюта:** EUR
 

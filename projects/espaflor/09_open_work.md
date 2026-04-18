@@ -1,4 +1,4 @@
-<!-- v: 2 | updated: 2026-04-18T16:50Z -->
+<!-- v: 3 | updated: 2026-04-18T20:00Z -->
 # 09. Open Work — TODO
 
 Всё, что ещё **не сделано** или сделано частично. Приоритизировано.
@@ -129,9 +129,11 @@
 - [ ] Email / Telegram notification
 - [ ] Dashboard «состояние всех интеграций»
 
-## P3 — Marketplace (отдельный workstream)
+---
 
-### 🆕 CRM и клиенты (см. [11_crm_and_customers.md](11_crm_and_customers.md))
+## P3 — Новые workstreams (каждый требует отдельной сессии)
+
+### P3.1 CRM и клиенты (см. [11_crm_and_customers.md](11_crm_and_customers.md))
 - [ ] MVP: базовая клиентская карточка создаётся при продаже (телефон)
 - [ ] История покупок через `partner_id` (штатно)
 - [ ] Этап 2: сегментация (VIP / Regular / Dormant / New)
@@ -141,7 +143,7 @@
 - [ ] Напоминания о значимых датах клиентов (ДР, годовщины)
 - [ ] GDPR compliance (opt-in, right to deletion)
 
-### Flowwow integration
+### P3.2 Flowwow integration
 🔴 **CONCEPT** — нет брифа, требует отдельной проектной сессии.
 
 **Что нужно разобрать:**
@@ -150,7 +152,7 @@
 - [ ] Формирование чеков для испанской бухгалтерии (SII требования)
 - [ ] Разделение: продажа ≠ комиссия ≠ cash movement
 
-### Glovo integration
+### P3.3 Glovo integration
 🔴 **CONCEPT** — новый workstream.
 
 **Специфика Glovo:**
@@ -161,9 +163,7 @@
 - [ ] Время сборки (SLA)
 - [ ] Связка с физическим витринным запасом
 
----
-
-## P3 — Catch-weight / variable pack content
+### P3.4 Catch-weight / variable pack content
 
 🔴 **CONCEPT** — обсуждался как большая тема, не реализован.
 
@@ -191,11 +191,9 @@ effective_unit_cost = paper_total_amount / actual_received_units
 - Дробление приёмки
 - Credit note / corrective bill
 
----
+### P3.5 Бухгалтерская автоматизация (три задачи бухгалтера)
 
-## P3 — Бухгалтерская автоматизация (три задачи бухгалтера)
-
-### 1. Sales reconciliation
+#### Sales reconciliation
 🔴 **CONCEPT**
 
 **Пайплайн (идея):**
@@ -205,7 +203,7 @@ effective_unit_cost = paper_total_amount / actual_received_units
 - Формирует report: OK / extra cash / missing cash / mismatch
 - UI: view «несверенные смены» с прямыми ссылками
 
-### 2. Expense pipeline + Spanish chart of accounts
+#### Expense pipeline + Spanish chart of accounts
 🟡 **READY** — `l10n_es` локализация установлена, Modelo 303/347/349 есть.
 
 **Что доделать:**
@@ -214,7 +212,7 @@ effective_unit_cost = paper_total_amount / actual_received_units
 - [ ] Workflow: ожидание счёта → получение → категоризация → оплата → приложение factura
 - [ ] Quarterly AEAT reports check
 
-### 3. End-to-end supervision
+#### End-to-end supervision
 🔴 **CONCEPT**
 
 **Kanban view на pedido с стадиями:**
@@ -229,9 +227,9 @@ draft → confirmed → received → unpacked → priced → labeled → on_sale
 
 ---
 
-## P4 — Compliance и инфраструктура
+## P4 — Долгосрочное (compliance, nice-to-have)
 
-### Испанский compliance
+### P4.1 Испанский compliance
 Из `FLOR-gov_-_Odoo_и_испанскии__план_счетов__1_.pdf` (226 стр):
 - [ ] Проверить работу Modelo 303 (VAT monthly/quarterly) — автогенерация
 - [ ] Modelo 347 (annual operations > 3005.06€ total)
@@ -240,15 +238,13 @@ draft → confirmed → received → unpacked → priced → labeled → on_sale
 - [ ] **SII** (Suministro Inmediato de Información AEAT) — отдельно
 - [ ] Electronic invoicing (Factura-E / UBL)
 
-### Infrastructure scaling
+### P4.2 Infrastructure scaling
 - [ ] Мониторинг нагрузки Odoo.sh
 - [ ] Перед пиками (8 марта, 14 февраля) → апгрейд до 2-3 Workers
 - [ ] Storage plan — сжатие/архивация attachments
 - [ ] Backup verification — периодически тестировать recovery
 
----
-
-## P4 — Workflow улучшения (nice to have)
+### P4.3 Workflow улучшения (nice to have)
 
 - [ ] Multi-warehouse split одного albarán (user story 4.5)
 - [ ] Pricelist multi-channel (витрина vs online)
@@ -261,7 +257,7 @@ draft → confirmed → received → unpacked → priced → labeled → on_sale
 ## ⚠️ Deprecated / не доделанное
 
 - `x_studio_many2many_field_4qh_1jkvk330u` («New Tags») — label переименован, но Studio не даёт удалить физически. Можно попробовать через Studio UI вручную.
-- `x_studio_legacy_source` на source-form — планировался, потом убран (см. [06_catalog_migration_toolkit.md](06_catalog_migration_toolkit.md))
+- `x_studio_legacy_source` на `product.template` — поле существует (см. [06](06_catalog_migration_toolkit.md), [08](08_current_state_snapshot.md)), но action 1145 фактически не заполняет его на source-записи. Для Variant-side информация хранится в `x_studio_variant_legacy_source`. Можно либо скрыть source-side поле из Studio view, либо начать его использовать — решение открыто.
 
 ---
 
