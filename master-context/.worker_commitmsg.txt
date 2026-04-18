@@ -1,46 +1,44 @@
-Fully flat layout: collapse artifacts/ tree, one subfolder remains
+Move README into master-context/, leave GitHub stub at root
 
-Owner flagged that the structure was still too nested: prompts/,
-templates/, code/odoo_actions/, code/migrations/, scripts/ all lived
-under artifacts/, which made the "upload to Project knowledge" step
-still require navigating several subfolders. Flattening further so
-that everything that gets uploaded lives at master-context/ root,
-with a single subfolder for the legacy one-off scripts.
+Owner flagged that uploading Project knowledge still required two drag-drop
+actions: one for the master-context/ folder and one for the root-level
+README.md. The point of the flat layout is that everything gets uploaded
+in a single action.
 
-Layout changes (9 git mv)
-- master-context/artifacts/prompts/*.txt       → master-context/  (3 files)
-- master-context/artifacts/templates/*.txt     → master-context/  (2 files)
-- master-context/artifacts/code/odoo_actions/*.py → master-context/  (3 files)
-- master-context/artifacts/scripts/*.sh        → master-context/  (1 file)
-- master-context/artifacts/code/migrations/    → master-context/legacy_migrations/  (3 files, folder rename)
-- artifacts/ folder tree removed entirely (no empty dirs left)
+Solution: move the full README into master-context/ along with everything
+else. Leave only a minimal 3-line stub at the repo root so GitHub's
+landing page still shows a description and a pointer to the real base.
 
-Relative links in py files restored to plain siblings
-- calculate_in_shop_action.py: ../../../03_odoo_receipt_review.md → 03_odoo_receipt_review.md
-- migrate_variant_action.py:   ../../../06_catalog_migration_toolkit.md → 06_catalog_migration_toolkit.md
+Files touched
+- README.md (repo root): reduced to stub (name + pointer to master-context/README.md)
+- master-context/README.md (new; formally the "moved" version): full
+  content of the former root README, adjusted for its new location
+  (sibling paths to other .md files, note about the root stub)
+- master-context/VERSIONS.md v8→v9: README row moved into main table
+  (no longer marked "repo root"); footnote about the stub
+- master-context/SYNC_STATE.md v7→v8: clarifies that full README is now
+  part of the single drag-drop, root stub stays in git only
+- master-context/CHANGELOG.md v9→v10: new rolling entry at top
+- master-context/12_ai_workflow.md v6→v7:
+  - "Состав базы" section: root is now only the stub, full README lives
+    in master-context/
+  - "См. также" link updated from ../README.md to README.md (sibling)
+  - Reviewer briefing no longer lists "README + master-context/*.md" —
+    all 19 .md live in master-context/ now
 
-Documentation reflects flat layout
-- README.md v4→v5: structure diagram + ultra-simple upload checklist
-- VERSIONS.md v7→v8: artifacts listed by name (no subfolders)
-- SYNC_STATE.md v6→v7: upload step reduced to "⌘A then unselect legacy_migrations/"
-- CHANGELOG.md v8→v9: new rolling entry
-- 12_ai_workflow.md v5→v6: "Состав базы" section rewritten, script path updated
-- 00_master_index.md v7→v8: Artifacts tables simplified
-- 00_source_files_index.md v4→v5: sections reorganized around flat file groups
+Side benefit: the full README now gets loaded into Project knowledge on
+every upload, so new worker chats see the repo rules at session start
+without needing an extra upload step.
 
-Commit script path updated
-- Was: bash ~/Documents/master-context/master-context/artifacts/scripts/commit_worker_delivery.sh
-- Now: bash ~/Documents/master-context/master-context/commit_worker_delivery.sh
-
-Script internals unchanged — it never referenced its own location.
-
-Not touched: 01-11, 99_invariants — business content unchanged.
+Not touched: 01-11, 99_invariants, 00_master_index, 00_source_files_index —
+nothing about the README move affects business content or navigation.
 
 Owner upload after this commit
+Same as before, single action:
 1. Clear Project knowledge
 2. Finder → ~/Documents/master-context/master-context/
 3. ⌘A
-4. ⌘-click on legacy_migrations/ folder to unselect it
-5. Drag-drop to Project knowledge
+4. ⌘-click legacy_migrations/ to unselect
+5. Drag-drop
 
-One action. Fully flat.
+The full README now lands in Project knowledge along with everything else.

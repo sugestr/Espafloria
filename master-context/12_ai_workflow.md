@@ -1,4 +1,4 @@
-<!-- v: 6 | updated: 2026-04-18T23:00Z -->
+<!-- v: 7 | updated: 2026-04-18T23:30Z -->
 # 12. AI Workflow
 
 Как несколько чатов Claude работают вместе над базой знаний.
@@ -115,9 +115,10 @@ reads: VERSIONS.md v<N> из Project
 
 ## 🗂️ Состав базы (19 .md)
 
-**Корень репо:** `README.md`
+**Корень репо:** только короткий stub `README.md` (GitHub-лендинг, в Project не грузим).
 
-**`master-context/`:** `VERSIONS.md`, `SYNC_STATE.md`, `CHANGELOG.md`, `00_master_index.md`, `00_source_files_index.md`, `01_business_context.md` … `12_ai_workflow.md`, `99_invariants.md`.
+**`master-context/`** (всё грузится в Project knowledge):
+`README.md` (полный, с правилами репо и layout'ом), `VERSIONS.md`, `SYNC_STATE.md`, `CHANGELOG.md`, `00_master_index.md`, `00_source_files_index.md`, `01_business_context.md` … `12_ai_workflow.md`, `99_invariants.md`.
 
 **`master-context/` на одном уровне с .md** — live-артефакты, которые грузятся в Project knowledge вместе с .md:
 - 3 Odoo server actions (`calculate_in_shop_action.py`, `migrate_variant_action.py`, `review_status_automation.py`)
@@ -224,7 +225,7 @@ sandbox-delivery по протоколу из 12_ai_workflow.md § Три ста
 Роль: reviewer-чат базы знаний Espafloria. Ничего не правь — только репорть.
 
 Шаги:
-1. Прочти все 19 .md (README + master-context/*.md)
+1. Прочти все 19 .md (все в master-context/; stub README в корне не считается)
 2. Противоречия между файлами
 3. Устаревшие/циклические ссылки
 4. Обещанные, но не созданные разделы
@@ -247,7 +248,7 @@ sandbox-delivery по протоколу из 12_ai_workflow.md § Три ста
 
 ## См. также
 
-- [`../README.md`](../README.md) — правила репо, как заливать Project knowledge
+- [`README.md`](README.md) — правила репо, как заливать Project knowledge
 - [`VERSIONS.md`](VERSIONS.md) — индекс версий
 - [`SYNC_STATE.md`](SYNC_STATE.md) — sync-маркер
 - [`CHANGELOG.md`](CHANGELOG.md) — rolling log сессий
