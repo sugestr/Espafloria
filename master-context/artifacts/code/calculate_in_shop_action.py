@@ -10,7 +10,7 @@
 # - Sets quantity = -1 (sentinel: "not counted yet by florist")
 # - Does NOT reset x_studio_received_packs (intentional — см. инвариант)
 #
-# See: [03_odoo_receipt_review.md](../03_odoo_receipt_review.md)
+# See: [03_odoo_receipt_review.md](../../03_odoo_receipt_review.md)
 
 for picking in records:
     for move in picking.move_ids:

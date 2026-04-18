@@ -1,0 +1,48 @@
+Flat layout + sandbox-delivery worker protocol
+
+Finalizes the restructure of the repo and the worker-chat protocol that was
+being iterated on across the last few sessions.
+
+Layout changes
+- All knowledge-base .md moved from projects/espaflor/ to master-context/ (flat).
+- README.md stays at repo root; single source of truth for humans landing
+  on GitHub.
+- Artifacts (Python actions, OpenAI prompts, Make.com templates, blueprint)
+  moved under master-context/artifacts/. They are never uploaded to Claude
+  Project knowledge; workers read them locally when needed.
+- 29 git mv renames preserved file history.
+
+Protocol changes
+- Worker now prepares all edits in its own sandbox (e.g. /home/claude/...)
+  and delivers a single zip to Owner via present_files. Owner downloads to
+  ~/Documents/ and runs a standard commit script. Previous approach of
+  editing the local clone directly via Desktop Commander is abandoned:
+  too expensive (one round-trip per edit), not atomic, easy to truncate
+  writes. Sandbox-delivery cuts a session from 30-50 DC calls to ~5.
+- GitHub MCP is now read-only for workers (sync-check, history). All
+  writes go through git in the local clone via terminal.
+- New standard commit script: master-context/artifacts/scripts/commit_worker_delivery.sh
+  Two-step: dry-run prints diff, --yes commits and pushes.
+- Commit message for each session lives inside the delivery zip as
+  master-context/.worker_commitmsg.txt (committed along with the changes).
+
+Content changes
+- 12_ai_workflow.md consolidated: single place for roles, 3-stage worker
+  flow, update heuristic, sandbox-delivery mechanics, and briefings.
+  Reduced from 447 to ~200 lines; Initial-commit briefing removed (obsolete).
+- SYNC_STATE.md shrunk to ~30 lines: only the sync marker question and
+  answer. All worker-protocol text lives in 12_ai_workflow.md now.
+- CHANGELOG.md converted to a rolling one-line-per-session index. Old
+  entries removed; details are recoverable via git log / git show.
+- VERSIONS.md tightened.
+- Two artifact Python files had ../ links fixed to ../../ after the move
+  from projects/espaflor/code/ to master-context/artifacts/code/.
+
+Not touched: 01-11, 99_invariants, 03, 06 — pure business content,
+unchanged. Internal [foo.md](foo.md) links keep working because all .md
+are now siblings in master-context/.
+
+Manual step for Owner after this commit
+- Clear Claude Project knowledge (old files were at projects/espaflor/*).
+- Drag-drop all .md from ~/Documents/master-context/master-context/ into
+  Project knowledge — exclude the artifacts/ folder.

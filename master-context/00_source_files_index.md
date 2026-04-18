@@ -1,4 +1,4 @@
-<!-- v: 2 | updated: 2026-04-18T20:00Z -->
+<!-- v: 3 | updated: 2026-04-18T21:00Z -->
 # 00. Source Files Index
 
 Карта всех **исходных файлов** проекта — откуда берётся информация в Master Context.
@@ -10,17 +10,23 @@
 
 ---
 
-## 📁 Файлы в проекте Claude (`/mnt/project/` в container'e)
+## 📁 Артефакты в репо (`master-context/artifacts/`)
 
-### `Integration_Telegram_Bot_blueprint__22_.json`
+Все эти файлы лежат в `artifacts/` **рядом** с базой знаний и в Claude Project knowledge **не загружаются** (слишком тяжёлые для ежедневной работы, нужны точечно). Worker читает локально из клона у Owner'а:
+```
+cat ~/Documents/master-context/master-context/artifacts/<path>
+```
+
+### `artifacts/makecom/Integration_Telegram_Bot_blueprint.json`
 
 **Что:** Экспорт production Make.com scenario «Integration Telegram Bot» (55 модулей).
 **Откуда:** Make.com UI → Scenario → Export Blueprint → `.json`
 **Размер:** ~230 KB
 **Состояние:** 🟢 **PROD** — это то, что реально работает.
+**Хранение:** 📦 В репо (`master-context/artifacts/makecom/`). **НЕ грузится в Project knowledge** из-за размера (~230 KB). При необходимости worker читает локально: `cat ~/Documents/master-context/master-context/artifacts/makecom/Integration_Telegram_Bot_blueprint.json`
 **Переработано в:** [02_makecom_bot.md](02_makecom_bot.md) — архитектура, Router 110, 4 Route, JSON payloads, магические числа
 **Когда обновлять:** после любого редакта scenario в Make.com UI
-**Как обновлять:** re-export из Make.com → положить поверх старого
+**Как обновлять:** re-export из Make.com → положить поверх старого → commit
 
 ### `02_makecom_bot_brief.md`
 
@@ -34,23 +40,27 @@
 
 **Фактическое состояние хранения:**
 
-| Файл в Project (`/mnt/project/`) | Назначение | Модуль в Make.com | Копия в репо |
-|---|---|---|---|
-| `prompt_ocr_v1.txt` | OCR extractor — парсит фото/PDF бумаги поставщика в STRICT JSON | модуль 3 (`gpt-5.4-mini`, T=0.2, max_tokens=4048) | `prompts/prompt_ocr_v1.txt` |
-| `prompt_reconciliation_v3_5.txt` | Reconciliation engine — сопоставляет бумагу с pedido, выбирает action | модуль 149 (`gpt-5.4`, T=0, max_tokens=4500) | `prompts/prompt_reconciliation_v3.5.txt` |
-| `prompt_diagnostics_v3_1.txt` | Diagnostics — формирует русский отчёт по pedido в Telegram + chatter | модуль 167 (`gpt-5.4-mini`, T=0.2, max_tokens=1200) | `prompts/prompt_diagnostics_v3.1.txt` |
+| Файл в репо (`artifacts/prompts/`) | Назначение | Модуль в Make.com |
+|---|---|---|
+| `prompt_ocr_v1.txt` | OCR extractor — парсит фото/PDF бумаги поставщика в STRICT JSON | модуль 3 (`gpt-5.4-mini`, T=0.2, max_tokens=4048) |
+| `prompt_reconciliation_v3.5.txt` | Reconciliation engine — сопоставляет бумагу с pedido, выбирает action | модуль 149 (`gpt-5.4`, T=0, max_tokens=4500) |
+| `prompt_diagnostics_v3.1.txt` | Diagnostics — формирует русский отчёт по pedido в Telegram + chatter | модуль 167 (`gpt-5.4-mini`, T=0.2, max_tokens=1200) |
 
 **Source of truth — где живёт каноническая версия промпта:**
-1. **Production Make.com scenario** — то, что реально выполняется. Если промпт в коде редактируется в Make.com UI, а `prompts/` в репо не обновлён — prod работает, документация отстала.
-2. **`prompts/` в этом репо** — долгосрочный снапшот, который можно diff'ать между версиями.
-3. `/mnt/project/prompt_*_v*.txt` — upload'ы в Claude Project knowledge для self-contained reference в чате. Обычно синхронизируются Owner'ом вручную после правки в Make.com.
+1. **Production Make.com scenario** — то, что реально выполняется. Если промпт в коде редактируется в Make.com UI, а `artifacts/prompts/` в репо не обновлён — prod работает, документация отстала.
+2. **`artifacts/prompts/` в этом репо** — долгосрочный снапшот, который можно diff'ать между версиями. В Project knowledge **не грузится** — worker читает локально при необходимости: `cat ~/Documents/master-context/master-context/artifacts/prompts/<file>`.
 
-**При изменении промпта — обновлять все три места.** Иначе новый worker будет работать с устаревшей версией.
+**При изменении промпта — обновлять оба места.** Иначе новый worker будет работать с устаревшей версией.
 
 **Переработано в:**
 - [02_makecom_bot.md § OCR Extractor](02_makecom_bot.md#ocr-extractor-prompt-3)
 - [02_makecom_bot.md § Reconciliation Engine v3.5](02_makecom_bot.md#reconciliation-engine-v35-prompt-149)
 - [02_makecom_bot.md § Diagnostics v3.1](02_makecom_bot.md#diagnostics-v31-prompt-167)
+
+### Code + Templates (также `artifacts/`)
+
+- `artifacts/code/` — Python-скрипты и Odoo server actions (`review_status_automation.py`, `migrate_variant_action.py`, `calculate_in_shop_action.py`, `image_import_*`, `split_big_csv.py`). В Project knowledge не грузятся — worker читает локально.
+- `artifacts/templates/` — Make.com шаблоны line-log (`make_line_log_pack.txt`, `make_line_log_unit.txt`). Переработаны в [02_makecom_bot.md § Templates](02_makecom_bot.md).
 
 ---
 
@@ -112,11 +122,12 @@
 
 ### При переносе в новый AI-чат
 ```
-1. Загрузить эту папку master-context/
-2. Дополнительно: ссылку на 00_source_files_index.md
-3. Попросить новый AI прочесть 00_master_index.md → 99_invariants.md → 08_current_state_snapshot.md
-4. Если нужны детали по боту — загрузить Integration_Telegram_Bot_blueprint__22_.json
-5. Если нужен compliance — загрузить 226-стр PDF
+1. Загрузить все .md из master-context/ в Project knowledge
+   (НЕ загружать artifacts/ — слишком тяжёлое)
+2. Новый AI читает 00_master_index.md → 99_invariants.md → 08_current_state_snapshot.md
+3. Если нужны детали по боту — worker читает локально:
+   cat ~/Documents/master-context/master-context/artifacts/makecom/Integration_Telegram_Bot_blueprint.json
+4. Если нужен compliance — загрузить 226-стр PDF (внешний, upload по запросу)
 ```
 
 ### При восстановлении после сбоя
@@ -134,8 +145,8 @@
 
 | Файл | Действие | Почему |
 |---|---|---|
-| `Integration_Telegram_Bot_blueprint__22_.json` | 🟢 Хранить | Production truth, обновляется при правках scenario |
-| `prompt_ocr_v1.txt` / `prompt_reconciliation_v3_5.txt` / `prompt_diagnostics_v3_1.txt` | 🟢 Хранить | Production prompts, копии также в `prompts/` |
+| `artifacts/makecom/Integration_Telegram_Bot_blueprint.json` | 🟢 Хранить (в репо, не в Project knowledge) | Production truth, обновляется при правках scenario |
+| `artifacts/prompts/prompt_ocr_v1.txt` / `prompt_reconciliation_v3.5.txt` / `prompt_diagnostics_v3.1.txt` | 🟢 Хранить (в репо, не в Project knowledge) | Production prompts |
 | `02_makecom_bot_brief.md` | 🟡 Можно удалить | Устаревший draft, поглощён в 02_makecom_bot.md |
 | FLOR-gov PDF | 🟢 Хранить (внешне) | Reference для compliance, читается точечно, upload по запросу |
 | Регламент Google Doc | 🟢 Хранить | Исторический документ + основа для переработки |

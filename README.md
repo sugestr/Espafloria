@@ -1,4 +1,4 @@
-<!-- v: 2 | updated: 2026-04-18T20:00Z -->
+<!-- v: 3 | updated: 2026-04-18T21:00Z -->
 # Espafloria — Master Context
 
 База знаний проекта автоматизации цветочной сети **Espafloria SL** (Barcelona, Spain) на Odoo.sh Custom + Make.com.
@@ -13,39 +13,57 @@
 
 **Умная сеть цветочных магазинов**, где база данных и роботы делают основную работу по контролю сотрудников и структурной целостности бизнеса. Это позволяет экономить на управляющем персонале и направлять деньги на мотивацию полевых сотрудников.
 
-Подробно: [`projects/espaflor/10_vision_and_roadmap.md`](projects/espaflor/10_vision_and_roadmap.md)
+Подробно: [`master-context/10_vision_and_roadmap.md`](master-context/10_vision_and_roadmap.md)
 
 ---
 
 ## 📚 Структура репозитория
 
+Repo использует **flat layout**: вся база знаний лежит в одной папке
+`master-context/`, без вложенных проектов. Артефакты (код, prompts,
+Make.com blueprint) — рядом в `master-context/artifacts/`, в Claude
+Project knowledge они **не загружаются** (читаются локально workers'ами
+при необходимости).
+
 ```
-espafloria/
-├── README.md                          (этот файл)
-├── VERSIONS.md                        (индекс версий всех файлов)
-└── projects/
-    └── espaflor/                      (основной проект Espafloria)
-        ├── 00_master_index.md         (навигация + глоссарий)
-        ├── 00_source_files_index.md   (карта исходников)
-        ├── 01_business_context.md     (бизнес, user stories, принципы)
-        ├── 02_makecom_bot.md          (Telegram-бот: OCR + reconciliation)
-        ├── 03_odoo_receipt_review.md  (приёмка товара)
-        ├── 04_holded_migration.md     (импорт из Holded)
-        ├── 05_florists_logistics_accountant.md  (роли, процессы, бонусы)
-        ├── 06_catalog_migration_toolkit.md       (миграция карточек)
-        ├── 07_infrastructure_devops.md           (Odoo.sh, compliance)
-        ├── 08_current_state_snapshot.md          (фото базы)
-        ├── 09_open_work.md                       (TODO)
-        ├── 10_vision_and_roadmap.md              (стратегия 15 шагов)
-        ├── 11_crm_and_customers.md               (CRM)
-        ├── 12_ai_workflow.md                     (multi-chat архитектура + briefings)
-        ├── 99_invariants.md                      (железные правила)
-        ├── CHANGELOG.md                          (журнал изменений)
-        ├── SYNC_STATE.md                         (version-based sync протокол)
-        ├── prompts/                              (OpenAI system prompts)
-        ├── code/                                 (Python + Odoo actions)
-        └── templates/                            (Make.com templates)
+Espafloria/                              (repo root, local clone:
+├── README.md                              ~/Documents/master-context/)
+└── master-context/                      ← всё, что грузится в Project knowledge
+    ├── VERSIONS.md                        (sync-маркер всей базы)
+    ├── SYNC_STATE.md                      (version-based sync протокол)
+    ├── CHANGELOG.md                       (журнал изменений)
+    ├── 00_master_index.md                 (навигация + глоссарий)
+    ├── 00_source_files_index.md           (карта исходников)
+    ├── 01_business_context.md             (бизнес, user stories, принципы)
+    ├── 02_makecom_bot.md                  (Telegram-бот: OCR + reconciliation)
+    ├── 03_odoo_receipt_review.md          (приёмка товара)
+    ├── 04_holded_migration.md             (импорт из Holded)
+    ├── 05_florists_logistics_accountant.md  (роли, процессы, бонусы)
+    ├── 06_catalog_migration_toolkit.md      (миграция карточек)
+    ├── 07_infrastructure_devops.md          (Odoo.sh, compliance)
+    ├── 08_current_state_snapshot.md         (фото базы)
+    ├── 09_open_work.md                      (TODO)
+    ├── 10_vision_and_roadmap.md             (стратегия 15 шагов)
+    ├── 11_crm_and_customers.md              (CRM)
+    ├── 12_ai_workflow.md                    (multi-chat архитектура + протокол worker'ов)
+    ├── 99_invariants.md                     (железные правила)
+    └── artifacts/                         ← НЕ в Project knowledge
+        ├── code/                            (Python + Odoo server actions)
+        ├── prompts/                         (OpenAI system prompts: OCR, reconciliation, diagnostics)
+        ├── templates/                       (Make.com line-log шаблоны)
+        └── makecom/                         (Integration_Telegram_Bot_blueprint.json — ~230 KB)
 ```
+
+### Как пользоваться Owner'у
+
+**При заливке базы в Claude Project knowledge:**
+
+1. Открой Finder → `~/Documents/master-context/master-context/`
+2. Выдели все `.md`-файлы (⌘A) — **исключи папку `artifacts/`**
+3. Drag-drop в Claude Project knowledge
+4. Файлы из `artifacts/` (включая `Integration_Telegram_Bot_blueprint.json` ~230 KB) **не грузи** — worker прочитает их локально через `cat ~/Documents/master-context/master-context/artifacts/...` при необходимости
+
+**При обновлении после коммита:** очисти Project knowledge полностью и повтори шаги 1-3.
 
 ---
 
@@ -93,7 +111,7 @@ espafloria/
 2. Project settings → Knowledge → удалить старые / загрузить новые
 3. Или: заменить файлы inplace
 
-**Sync check:** следующий чат сравнит `v` у `VERSIONS.md` в Project и в GitHub. Совпадает — работаем. Не совпадает — Owner перезаливает. См. [`projects/espaflor/SYNC_STATE.md`](projects/espaflor/SYNC_STATE.md).
+**Sync check:** следующий чат сравнит `v` у `VERSIONS.md` в Project и в GitHub. Совпадает — работаем. Не совпадает — Owner перезаливает. См. [`master-context/SYNC_STATE.md`](master-context/SYNC_STATE.md).
 
 ---
 
@@ -102,7 +120,7 @@ espafloria/
 ### Новая сессия с Claude (или другим AI)
 
 1. Убедиться, что Project knowledge содержит актуальную версию Master Context
-2. В первом сообщении: «Прочитай `projects/espaflor/00_master_index.md`, потом `99_invariants.md`, потом по задаче»
+2. В первом сообщении: «Прочитай `00_master_index.md`, потом `99_invariants.md`, потом по задаче»
 3. Для крупных задач — указать конкретный файл (например, при работе с ботом → `02_makecom_bot.md`)
 
 ### Протокол для AI-ассистента

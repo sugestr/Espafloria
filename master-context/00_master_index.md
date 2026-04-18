@@ -1,4 +1,4 @@
-<!-- v: 5 | updated: 2026-04-18T20:00Z -->
+<!-- v: 6 | updated: 2026-04-18T21:00Z -->
 # Master Context — Espafloria Odoo Automation
 
 **Last updated:** 2026-04-18
@@ -64,11 +64,14 @@
 
 ## Артефакты
 
+Живут в `artifacts/` **рядом** с этой папкой (`master-context/artifacts/`) и в Project knowledge **не загружаются** — worker читает их локально через `cat ~/Documents/master-context/master-context/artifacts/...` при необходимости.
+
 | Папка | Что внутри |
 |---|---|
-| `/prompts/` | System prompts для OpenAI (OCR v1, Reconciliation v3.5, Diagnostics v3.1) |
-| `/code/` | Production-код: review_status, migrate_variant, calculate_in_shop + Python-скрипты импорта |
-| `/templates/` | Make.com line-log шаблоны (пачечная/штучная ветки) |
+| `artifacts/prompts/` | System prompts для OpenAI (OCR v1, Reconciliation v3.5, Diagnostics v3.1) |
+| `artifacts/code/` | Production-код: review_status, migrate_variant, calculate_in_shop + Python-скрипты импорта |
+| `artifacts/templates/` | Make.com line-log шаблоны (пачечная/штучная ветки) |
+| `artifacts/makecom/` | `Integration_Telegram_Bot_blueprint.json` — экспорт production Make.com scenario (~230 KB) |
 
 ---
 
@@ -108,7 +111,7 @@
 
 | Артефакт | Где | Что |
 |---|---|---|
-| Make.com blueprint | `Integration_Telegram_Bot_blueprint__22_.json` | 55 модулей, 4 Route |
+| Make.com blueprint | `artifacts/makecom/Integration_Telegram_Bot_blueprint.json` | 55 модулей, 4 Route. ~230 KB, в Project knowledge не грузится |
 | Google Sheets: products | https://docs.google.com/spreadsheets/d/1ep4WA5ciu2R1-mVx9Ish2dGH1s9kdjVECGkkGBCsBaE | ETL справочник Holded→Odoo |
 | Google Sheets: albaran | https://docs.google.com/spreadsheets/d/1apNcpf7-44OGQVb39wNfZBU7INv3iyTGEFsZVOvH_58 | ETL для albaran→pedido |
 | Регламент сотрудников | Google Doc (29 MB, Holded-based) | Ждёт переработки под Odoo |
