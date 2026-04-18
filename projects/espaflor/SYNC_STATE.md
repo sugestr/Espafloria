@@ -1,4 +1,4 @@
-<!-- v: 1 | updated: 2026-04-18T18:05Z -->
+<!-- v: 2 | updated: 2026-04-18T19:10Z -->
 # SYNC_STATE
 
 **Это координационный файл для multi-chat архитектуры.**
@@ -11,19 +11,19 @@
 ```yaml
 # Что загружено в Claude Project knowledge
 project_knowledge_version:
-  last_updated: 2026-04-18T18:05:00Z
+  last_updated: 2026-04-18T19:10:00Z
   uploaded_by: Andriy
-  base_commit: pending-initial-commit  # Будет обновлено после первого коммита
+  base_commit: 9cd7d5675147b6362caa17dfe8bce5ab8898d59f
 
 # GitHub repo (source of truth)
 github_repo:
   url: https://github.com/sugestr/espafloria
   branch: main
-  latest_commit: pending-initial-commit  # Будет обновлено после первого коммита
-  last_commit_date: pending
+  latest_commit: 9cd7d5675147b6362caa17dfe8bce5ab8898d59f
+  last_commit_date: 2026-04-18
 
 # Cinema check
-sync_status: initial-setup  # possible values: synced | outdated | initial-setup | unknown
+sync_status: synced
 ```
 
 ---
