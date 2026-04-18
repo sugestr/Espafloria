@@ -1,4 +1,4 @@
-<!-- v: 11 | updated: 2026-04-19T12:30Z -->
+<!-- v: 12 | updated: 2026-04-19T22:15Z -->
 # CHANGELOG
 
 Одна строка на worker-сессию. Детали — `git log master-context/` или `git show <sha>`.
@@ -7,6 +7,7 @@
 
 ---
 
+- 2026-04-19 — Two transport paths documented (Claude Code + zip), GitHub connector in SYNC_STATE
 - 2026-04-19 — Meta cleanup: flat-layout stale paths, --reset + zip-match in commit script, upload SoT in SYNC_STATE
 - 2026-04-18 — README moved into master-context/, root stub for GitHub only
 - 2026-04-18 — Fully flat layout: everything at master-context/ root, only legacy_migrations/ as subfolder

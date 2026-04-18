@@ -1,4 +1,4 @@
-<!-- v: 10 | updated: 2026-04-19T12:30Z -->
+<!-- v: 11 | updated: 2026-04-19T22:15Z -->
 # VERSIONS
 
 Индекс версий всех `.md` в базе. **`v` в header этого файла — маркер синка всей базы** (см. [SYNC_STATE.md](SYNC_STATE.md)).
@@ -11,11 +11,11 @@
 
 | Файл | v | Updated (UTC) |
 |---|---|---|
-| `README.md` | 7 | 2026-04-19T12:30Z |
-| `VERSIONS.md` | 10 | 2026-04-19T12:30Z |
-| `SYNC_STATE.md` | 9 | 2026-04-19T12:30Z |
-| `CHANGELOG.md` | 11 | 2026-04-19T12:30Z |
-| `00_master_index.md` | 9 | 2026-04-19T12:30Z |
+| `README.md` | 8 | 2026-04-19T22:15Z |
+| `VERSIONS.md` | 11 | 2026-04-19T22:15Z |
+| `SYNC_STATE.md` | 10 | 2026-04-19T22:15Z |
+| `CHANGELOG.md` | 12 | 2026-04-19T22:15Z |
+| `00_master_index.md` | 9 | 2026-04-19T22:15Z |
 | `00_source_files_index.md` | 6 | 2026-04-19T12:30Z |
 | `01_business_context.md` | 2 | 2026-04-18T20:00Z |
 | `02_makecom_bot.md` | 4 | 2026-04-19T12:30Z |
@@ -28,7 +28,7 @@
 | `09_open_work.md` | 3 | 2026-04-18T20:00Z |
 | `10_vision_and_roadmap.md` | 3 | 2026-04-18T20:00Z |
 | `11_crm_and_customers.md` | 1 | 2026-04-18T16:35Z |
-| `12_ai_workflow.md` | 8 | 2026-04-19T12:30Z |
+| `12_ai_workflow.md` | 9 | 2026-04-19T22:15Z |
 | `99_invariants.md` | 2 | 2026-04-18T16:45Z |
 
 ---

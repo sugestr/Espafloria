@@ -1,7 +1,7 @@
-<!-- v: 9 | updated: 2026-04-19T12:30Z -->
+<!-- v: 9 | updated: 2026-04-19T22:15Z -->
 # Master Context — Espafloria Odoo Automation
 
-**Last updated:** 2026-04-18
+**Last updated:** 2026-04-19
 **Owner:** Andriy
 **Company:** Espafloria SL (цветочный бизнес, Испания)
 **Platform:** Odoo.sh Custom (espafloriasl.odoo.com)

@@ -1,4 +1,4 @@
-<!-- v: 7 | updated: 2026-04-19T12:30Z -->
+<!-- v: 8 | updated: 2026-04-19T22:15Z -->
 # Espafloria — Master Context
 
 База знаний проекта автоматизации цветочной сети **Espafloria SL** (Barcelona, Spain) на Odoo.sh Custom + Make.com.
@@ -76,12 +76,12 @@ Sync-check после: `v` у `VERSIONS.md` в Project = `v` в GitHub.
 
 ## 🤖 Использование в AI-чатах
 
-Новая сессия:
-1. Убедиться, что Project knowledge свежий (sync-check по `VERSIONS.md`, см. [`SYNC_STATE.md`](SYNC_STATE.md))
-2. Worker пишет Self-ID первым сообщением — формат в [`12_ai_workflow.md § Self-ID`](12_ai_workflow.md#self-id-для-worker-чата)
-3. Читает `00_master_index.md` → `99_invariants.md` → файлы по задаче
+Работа идёт по одному из двух путей — оба валидны, выбор по контексту (см. [`12_ai_workflow.md § Два пути доставки правок`](12_ai_workflow.md#-два-пути-доставки-правок)):
 
-Полный worker-протокол — [`12_ai_workflow.md`](12_ai_workflow.md).
+- **Claude Code** — `cd ~/Documents/master-context && claude` в терминале на Mac. Standing instructions в [`../CLAUDE.md`](../CLAUDE.md) подхватываются автоматически. После `git push` жми **«Sync now»** на GitHub-коннекторе, чтобы web-чаты в Project увидели правки.
+- **Web-чат / zip** — sandbox-delivery через `present_files` + `commit_worker_delivery.sh`. Нужен когда не за ноутом или задача через orchestrator. Формальный протокол (Self-ID, три стадии) — в [`12_ai_workflow.md`](12_ai_workflow.md).
+
+Перед любой правкой читай: `00_master_index.md` → `99_invariants.md` → файлы по задаче.
 
 ---
 
