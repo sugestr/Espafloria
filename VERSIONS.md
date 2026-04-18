@@ -1,9 +1,13 @@
-<!-- v: 3 | updated: 2026-04-18T19:10Z -->
+<!-- v: 4 | updated: 2026-04-18T20:00Z -->
 # VERSIONS
 
-Индекс версий всех файлов Master Context. Обновляется **одновременно** с header'ом в самом файле.
+Сводный индекс версий всех файлов Master Context.
 
-Формат: `file | v | updated (UTC)`
+Версия самого `VERSIONS.md` (в header'е выше) — **маркер состояния всей базы
+для version-based sync**. Если у тебя в Project Knowledge `v` здесь меньше,
+чем на GitHub, — база устарела. См. [SYNC_STATE.md](SYNC_STATE.md).
+
+Формат: `file | v | updated (UTC) | описание`.
 
 ---
 
@@ -11,25 +15,25 @@
 
 | Файл | v | Updated (UTC) | Описание |
 |---|---|---|---|
-| `README.md` | 1 | 2026-04-18T17:05Z | Правила репо для GitHub |
-| `VERSIONS.md` | 3 | 2026-04-18T19:10Z | Этот файл |
-| `SYNC_STATE.md` | 2 | 2026-04-18T19:10Z | Состояние синхронизации Project↔GitHub |
-| `00_master_index.md` | 4 | 2026-04-18T18:10Z | Навигация + глоссарий |
-| `00_source_files_index.md` | 1 | 2026-04-18T15:55Z | Карта исходников |
-| `01_business_context.md` | 1 | 2026-04-18T15:45Z | Бизнес, user stories, принципы |
-| `02_makecom_bot.md` | 2 | 2026-04-18T16:40Z | Telegram-бот (+Platform Dependencies) |
+| `README.md` | 2 | 2026-04-18T20:00Z | Правила репо для GitHub, sync mention |
+| `VERSIONS.md` | 4 | 2026-04-18T20:00Z | Этот файл (sync маркер) |
+| `SYNC_STATE.md` | 3 | 2026-04-18T20:00Z | Version-based sync протокол |
+| `00_master_index.md` | 5 | 2026-04-18T20:00Z | Навигация + глоссарий (+sync термины) |
+| `00_source_files_index.md` | 2 | 2026-04-18T20:00Z | Карта исходников (prompts — реальные имена) |
+| `01_business_context.md` | 2 | 2026-04-18T20:00Z | Бизнес (+cross-ref warehouse_id=2 к 05, 08) |
+| `02_makecom_bot.md` | 3 | 2026-04-18T20:00Z | Telegram-бот (+переформулирован SoT для prompts) |
 | `03_odoo_receipt_review.md` | 1 | 2026-04-18T15:45Z | Приёмка (stock.move, review-status) |
-| `04_holded_migration.md` | 1 | 2026-04-18T15:45Z | Импорт из Holded |
+| `04_holded_migration.md` | 2 | 2026-04-18T20:00Z | Импорт из Holded (убрана стрелка в заголовке) |
 | `05_florists_logistics_accountant.md` | 2 | 2026-04-18T16:30Z | Роли: флорист, логист, бухгалтер + salary |
 | `06_catalog_migration_toolkit.md` | 1 | 2026-04-18T15:45Z | Migration action + SOP |
-| `07_infrastructure_devops.md` | 1 | 2026-04-18T15:45Z | Odoo.sh, compliance |
-| `08_current_state_snapshot.md` | 1 | 2026-04-18T15:45Z | Фото базы после hot-fix |
-| `09_open_work.md` | 2 | 2026-04-18T16:50Z | TODO приоритизированный |
-| `10_vision_and_roadmap.md` | 2 | 2026-04-18T16:55Z | Видение + 15 шагов |
+| `07_infrastructure_devops.md` | 2 | 2026-04-18T20:00Z | Odoo.sh + MCP list (+GitHub, +Odoo) |
+| `08_current_state_snapshot.md` | 2 | 2026-04-18T20:00Z | Фото базы (фикс счётов полей) |
+| `09_open_work.md` | 3 | 2026-04-18T20:00Z | TODO (P3/P4 переструктурированы в подразделы) |
+| `10_vision_and_roadmap.md` | 3 | 2026-04-18T20:00Z | Видение + 15 шагов (+11.5 в roadmap таблице) |
 | `11_crm_and_customers.md` | 1 | 2026-04-18T16:35Z | CRM scope |
-| `12_ai_workflow.md` | 1 | 2026-04-18T18:00Z | Multi-chat архитектура + briefings |
+| `12_ai_workflow.md` | 2 | 2026-04-18T20:00Z | Multi-chat + version-based sync protocol |
 | `99_invariants.md` | 2 | 2026-04-18T16:45Z | 37 железных правил |
-| `CHANGELOG.md` | 4 | 2026-04-18T18:15Z | Журнал изменений |
+| `CHANGELOG.md` | 5 | 2026-04-18T20:00Z | Журнал изменений (+Base Polish session) |
 
 ## Артефакты (не версионируются в VERSIONS.md)
 
@@ -51,16 +55,17 @@
 
 ## Протокол обновления
 
-При правке любого `.md` файла:
+При правке любого `.md` файла (кроме артефактов):
 
-1. Изменить `v` (обычно +1) и `updated` в header'е файла
-2. Обновить соответствующую строку в этой таблице
-3. Сделать коммит с сообщением вида `file.md v2: краткое описание изменения`
-4. Напомнить пользователю перезалить в Claude Project knowledge
+1. Изменить `v` и `updated` в header'е файла.
+2. Обновить соответствующую строку в этой таблице.
+3. **Всегда** bump `v` + `updated` у самого `VERSIONS.md` в header выше.
+4. Коммит одним пушем в GitHub.
+5. В финальном сообщении Owner'у — «VERSIONS.md: v`<old>` → v`<new>`, изменённые файлы: ..., перезалей в Project knowledge».
 
 **Правила бампа версии:**
 - Минорные добавления / новые разделы → `v+1`
 - Крупные переструктуризации → `v+5` или округление
-- Опечатки и формулировки → не менять `v`, только `updated`
+- Опечатки и чистая пунктуация → только `updated`, `v` не трогать, в эту таблицу не писать
 
-См. также: [README.md](README.md)
+См. [README.md](README.md), [SYNC_STATE.md](SYNC_STATE.md).

@@ -1,4 +1,4 @@
-<!-- v: 1 | updated: 2026-04-18T17:05Z -->
+<!-- v: 2 | updated: 2026-04-18T20:00Z -->
 # Espafloria — Master Context
 
 База знаний проекта автоматизации цветочной сети **Espafloria SL** (Barcelona, Spain) на Odoo.sh Custom + Make.com.
@@ -38,8 +38,10 @@ espafloria/
         ├── 09_open_work.md                       (TODO)
         ├── 10_vision_and_roadmap.md              (стратегия 15 шагов)
         ├── 11_crm_and_customers.md               (CRM)
+        ├── 12_ai_workflow.md                     (multi-chat архитектура + briefings)
         ├── 99_invariants.md                      (железные правила)
         ├── CHANGELOG.md                          (журнал изменений)
+        ├── SYNC_STATE.md                         (version-based sync протокол)
         ├── prompts/                              (OpenAI system prompts)
         ├── code/                                 (Python + Odoo actions)
         └── templates/                            (Make.com templates)
@@ -90,6 +92,8 @@ espafloria/
 1. Скачать ZIP с GitHub (или обновлённые файлы)
 2. Project settings → Knowledge → удалить старые / загрузить новые
 3. Или: заменить файлы inplace
+
+**Sync check:** следующий чат сравнит `v` у `VERSIONS.md` в Project и в GitHub. Совпадает — работаем. Не совпадает — Owner перезаливает. См. [`projects/espaflor/SYNC_STATE.md`](projects/espaflor/SYNC_STATE.md).
 
 ---
 
