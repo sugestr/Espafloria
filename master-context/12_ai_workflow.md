@@ -1,4 +1,4 @@
-<!-- v: 4 | updated: 2026-04-18T22:00Z -->
+<!-- v: 5 | updated: 2026-04-18T22:30Z -->
 # 12. AI Workflow
 
 Как несколько чатов Claude работают вместе над базой знаний.
@@ -119,7 +119,9 @@ reads: VERSIONS.md v<N> из Project
 
 **`master-context/`:** `VERSIONS.md`, `SYNC_STATE.md`, `CHANGELOG.md`, `00_master_index.md`, `00_source_files_index.md`, `01_business_context.md` … `12_ai_workflow.md`, `99_invariants.md`.
 
-**`master-context/artifacts/`** (в Project knowledge **не грузятся**): `code/`, `prompts/`, `templates/`, `makecom/Integration_Telegram_Bot_blueprint.json`, `scripts/commit_worker_delivery.sh`.
+**`master-context/artifacts/`** — разделено по частоте использования:
+- **В Project knowledge грузим:** `prompts/` (OpenAI system prompts), `templates/` (Make.com line-log), `code/odoo_actions/` (живые Odoo server actions — `calculate_in_shop`, `migrate_variant`, `review_status`).
+- **Только в git:** `code/migrations/` (одноразовые Holded-миграции), `scripts/` (commit-скрипт), `makecom/` (резерв для blueprint JSON ~230 KB — через Make MCP достаём).
 
 ---
 

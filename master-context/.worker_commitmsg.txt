@@ -1,48 +1,59 @@
-Flat layout + sandbox-delivery worker protocol
+Split artifacts/code into odoo_actions and migrations
 
-Finalizes the restructure of the repo and the worker-chat protocol that was
-being iterated on across the last few sessions.
+Calibrates what lives in Claude Project knowledge vs what stays only in
+git. Last commit said "don't upload any artifacts to Project", which was
+too strict — the small ones (prompts, templates, live Odoo server actions)
+are referenced often in business discussions and are cheap token-wise.
+Only the one-off Holded migration scripts and heavy binaries should stay
+out of Project.
 
-Layout changes
-- All knowledge-base .md moved from projects/espaflor/ to master-context/ (flat).
-- README.md stays at repo root; single source of truth for humans landing
-  on GitHub.
-- Artifacts (Python actions, OpenAI prompts, Make.com templates, blueprint)
-  moved under master-context/artifacts/. They are never uploaded to Claude
-  Project knowledge; workers read them locally when needed.
-- 29 git mv renames preserved file history.
+Artifact reorganization
+- artifacts/code/ split into two subfolders:
+  - odoo_actions/     → live Odoo server actions, goes into Project
+      calculate_in_shop_action.py (id=1150)
+      migrate_variant_action.py   (id=1145, supplierinfo patch)
+      review_status_automation.py (id=1146)
+  - migrations/       → one-off Holded conversion scripts, git only
+      image_import_from_holded_api.py
+      image_import_from_urls.py
+      split_big_csv.py
+- 6 git mv preserved file history.
+- Relative .md links in two py files adjusted from ../ to ../../../
+  (one more level of nesting).
+- Make.com blueprint JSON decision reversed: no longer stored in repo.
+  Worker fetches it live through Make MCP when needed. artifacts/makecom/
+  kept as a reserved empty directory in case we want it back later.
 
-Protocol changes
-- Worker now prepares all edits in its own sandbox (e.g. /home/claude/...)
-  and delivers a single zip to Owner via present_files. Owner downloads to
-  ~/Documents/ and runs a standard commit script. Previous approach of
-  editing the local clone directly via Desktop Commander is abandoned:
-  too expensive (one round-trip per edit), not atomic, easy to truncate
-  writes. Sandbox-delivery cuts a session from 30-50 DC calls to ~5.
-- GitHub MCP is now read-only for workers (sync-check, history). All
-  writes go through git in the local clone via terminal.
-- New standard commit script: master-context/artifacts/scripts/commit_worker_delivery.sh
-  Two-step: dry-run prints diff, --yes commits and pushes.
-- Commit message for each session lives inside the delivery zip as
-  master-context/.worker_commitmsg.txt (committed along with the changes).
+Project knowledge upload rules — now precise
+- Old rule (over-strict): upload only .md, skip all of artifacts/.
+- New rule: upload .md + artifacts/prompts/ + artifacts/templates/ +
+  artifacts/code/odoo_actions/. Skip artifacts/code/migrations/ +
+  artifacts/scripts/ + artifacts/makecom/.
 
-Content changes
-- 12_ai_workflow.md consolidated: single place for roles, 3-stage worker
-  flow, update heuristic, sandbox-delivery mechanics, and briefings.
-  Reduced from 447 to ~200 lines; Initial-commit briefing removed (obsolete).
-- SYNC_STATE.md shrunk to ~30 lines: only the sync marker question and
-  answer. All worker-protocol text lives in 12_ai_workflow.md now.
-- CHANGELOG.md converted to a rolling one-line-per-session index. Old
-  entries removed; details are recoverable via git log / git show.
-- VERSIONS.md tightened.
-- Two artifact Python files had ../ links fixed to ../../ after the move
-  from projects/espaflor/code/ to master-context/artifacts/code/.
+Files touched
+- README.md v3→v4: structure diagram + upload checklist updated
+- VERSIONS.md v6→v7: artifacts block rewritten by group
+- SYNC_STATE.md v5→v6: upload rules block added
+- CHANGELOG.md v7→v8: new rolling entry at top
+- 12_ai_workflow.md v4→v5: Состав базы section updated for split
+- 00_master_index.md v6→v7: Artifacts tables split into "in Project" /
+  "git only"; Make blueprint row now points to Make MCP
+- 00_source_files_index.md v3→v4: full rewrite of artifacts section into
+  three groups (in Project / git only / not in git at all)
+- artifacts/code/odoo_actions/calculate_in_shop_action.py: ../ → ../../../
+- artifacts/code/odoo_actions/migrate_variant_action.py: ../ → ../../../
 
-Not touched: 01-11, 99_invariants, 03, 06 — pure business content,
-unchanged. Internal [foo.md](foo.md) links keep working because all .md
-are now siblings in master-context/.
+Not touched
+- 01-11, 99_invariants, 02, 03, 04, 05, 06, 07, 08, 09, 10 — business
+  content unchanged.
 
-Manual step for Owner after this commit
-- Clear Claude Project knowledge (old files were at projects/espaflor/*).
-- Drag-drop all .md from ~/Documents/master-context/master-context/ into
-  Project knowledge — exclude the artifacts/ folder.
+Owner's upload procedure after this commit
+1. Clear Project knowledge completely.
+2. Finder → ~/Documents/master-context/master-context/
+3. Drag-drop in batches:
+   - all .md from master-context/ root (⌘A, unselect artifacts/ folder)
+   - contents of artifacts/prompts/
+   - contents of artifacts/templates/
+   - contents of artifacts/code/odoo_actions/
+4. Do NOT upload: artifacts/code/migrations/, artifacts/scripts/,
+   artifacts/makecom/.

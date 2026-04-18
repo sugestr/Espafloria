@@ -16,7 +16,7 @@
 #   2. Save
 #   3. Click "Migrate to selected variant" button
 #
-# See: [06_catalog_migration_toolkit.md](../../06_catalog_migration_toolkit.md)
+# See: [06_catalog_migration_toolkit.md](../../../06_catalog_migration_toolkit.md)
 
 for record in records:
     if not record.x_studio_target_variant:

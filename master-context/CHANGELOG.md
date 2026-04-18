@@ -1,4 +1,4 @@
-<!-- v: 7 | updated: 2026-04-18T22:00Z -->
+<!-- v: 8 | updated: 2026-04-18T22:30Z -->
 # CHANGELOG
 
 Одна строка на worker-сессию. Детали — `git log master-context/` или `git show <sha>`.
@@ -7,6 +7,7 @@
 
 ---
 
+- 2026-04-18 — Split artifacts/code: odoo_actions/ (in Project) vs migrations/ (git only)
 - 2026-04-18 — Flat layout + sandbox-delivery worker protocol + commit script
 - 2026-04-18 — Base polish: SHA-sync → version-sync, commit-gate for worker
 - 2026-04-18 — Multi-chat architecture: roles, briefings, SYNC_STATE

@@ -1,4 +1,4 @@
-<!-- v: 6 | updated: 2026-04-18T21:00Z -->
+<!-- v: 7 | updated: 2026-04-18T22:30Z -->
 # Master Context — Espafloria Odoo Automation
 
 **Last updated:** 2026-04-18
@@ -64,14 +64,23 @@
 
 ## Артефакты
 
-Живут в `artifacts/` **рядом** с этой папкой (`master-context/artifacts/`) и в Project knowledge **не загружаются** — worker читает их локально через `cat ~/Documents/master-context/master-context/artifacts/...` при необходимости.
+Живут в `artifacts/` рядом с этой папкой (`master-context/artifacts/`). Часть грузится в Project knowledge, часть — только в git.
+
+**В Project knowledge (нужны для обсуждения бизнеса):**
 
 | Папка | Что внутри |
 |---|---|
 | `artifacts/prompts/` | System prompts для OpenAI (OCR v1, Reconciliation v3.5, Diagnostics v3.1) |
-| `artifacts/code/` | Production-код: review_status, migrate_variant, calculate_in_shop + Python-скрипты импорта |
 | `artifacts/templates/` | Make.com line-log шаблоны (пачечная/штучная ветки) |
-| `artifacts/makecom/` | `Integration_Telegram_Bot_blueprint.json` — экспорт production Make.com scenario (~230 KB) |
+| `artifacts/code/odoo_actions/` | Живые Odoo server actions: `calculate_in_shop_action.py` (id=1150), `migrate_variant_action.py` (id=1145), `review_status_automation.py` (id=1146) |
+
+**Только в git (достаём по запросу):**
+
+| Папка | Что внутри |
+|---|---|
+| `artifacts/code/migrations/` | Одноразовые Holded-миграции: `image_import_*`, `split_big_csv.py` |
+| `artifacts/scripts/` | `commit_worker_delivery.sh` — стандартный коммит-скрипт worker'а |
+| `artifacts/makecom/` | Резерв для Make.com blueprint JSON (~230 KB, в Project не грузится даже если появится) |
 
 ---
 
@@ -111,7 +120,7 @@
 
 | Артефакт | Где | Что |
 |---|---|---|
-| Make.com blueprint | `artifacts/makecom/Integration_Telegram_Bot_blueprint.json` | 55 модулей, 4 Route. ~230 KB, в Project knowledge не грузится |
+| Make.com blueprint | через Make MCP (в репо не храним) | 55 модулей, 4 Route. ~230 KB. Достаём live через `mcp:make` когда нужен |
 | Google Sheets: products | https://docs.google.com/spreadsheets/d/1ep4WA5ciu2R1-mVx9Ish2dGH1s9kdjVECGkkGBCsBaE | ETL справочник Holded→Odoo |
 | Google Sheets: albaran | https://docs.google.com/spreadsheets/d/1apNcpf7-44OGQVb39wNfZBU7INv3iyTGEFsZVOvH_58 | ETL для albaran→pedido |
 | Регламент сотрудников | Google Doc (29 MB, Holded-based) | Ждёт переработки под Odoo |
