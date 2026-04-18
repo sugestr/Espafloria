@@ -1,0 +1,3 @@
+{{if(151.quantity_match = false; "⚠️ кол-во не совпало: pedido " + toString(151.pedido_quantity) + " шт→бумага " + toString(151.paper_quantity) + " шт. "; )}}{{if(151.action = "update_price"; "цена " + toString(151.current_price_unit) + "€→" + toString(151.new_price_unit) + "€."; "✔цена ok.")}} Código {{151.supplier_sku}}. /{{formatDate(now; "YY-MMM-DD")}}{{if((ifempty(255.existing_item_comment; "") != ""); "
+"; )}}{{replace(ifempty(255.existing_item_comment; ""); newline; "
+")}}
