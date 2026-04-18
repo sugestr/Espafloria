@@ -1,4 +1,4 @@
-<!-- v: 7 | updated: 2026-04-18T22:30Z -->
+<!-- v: 8 | updated: 2026-04-18T23:00Z -->
 # Master Context — Espafloria Odoo Automation
 
 **Last updated:** 2026-04-18
@@ -64,23 +64,27 @@
 
 ## Артефакты
 
-Живут в `artifacts/` рядом с этой папкой (`master-context/artifacts/`). Часть грузится в Project knowledge, часть — только в git.
+Живут в `master-context/` **на одном уровне с .md** (плоский layout). Исключение — одна подпапка `legacy_migrations/` со старыми одноразовыми скриптами.
 
-**В Project knowledge (нужны для обсуждения бизнеса):**
+**Грузятся в Project knowledge вместе со всеми .md:**
 
-| Папка | Что внутри |
+| Файл | Что это |
 |---|---|
-| `artifacts/prompts/` | System prompts для OpenAI (OCR v1, Reconciliation v3.5, Diagnostics v3.1) |
-| `artifacts/templates/` | Make.com line-log шаблоны (пачечная/штучная ветки) |
-| `artifacts/code/odoo_actions/` | Живые Odoo server actions: `calculate_in_shop_action.py` (id=1150), `migrate_variant_action.py` (id=1145), `review_status_automation.py` (id=1146) |
+| `calculate_in_shop_action.py` | Odoo server action id=1150 |
+| `migrate_variant_action.py` | Odoo server action id=1145 (с patch supplierinfo) |
+| `review_status_automation.py` | Odoo server action id=1146 |
+| `prompt_ocr_v1.txt` | OpenAI OCR extractor (модуль 3) |
+| `prompt_reconciliation_v3.5.txt` | OpenAI reconciliation engine (модуль 149) |
+| `prompt_diagnostics_v3.1.txt` | OpenAI diagnostics (модуль 167) |
+| `make_line_log_pack.txt` | Make.com шаблон — пачечная ветка |
+| `make_line_log_unit.txt` | Make.com шаблон — штучная ветка |
 
-**Только в git (достаём по запросу):**
+**В Project knowledge не грузятся (есть в репо, достаются по запросу):**
 
-| Папка | Что внутри |
+| Файл / папка | Что это |
 |---|---|
-| `artifacts/code/migrations/` | Одноразовые Holded-миграции: `image_import_*`, `split_big_csv.py` |
-| `artifacts/scripts/` | `commit_worker_delivery.sh` — стандартный коммит-скрипт worker'а |
-| `artifacts/makecom/` | Резерв для Make.com blueprint JSON (~230 KB, в Project не грузится даже если появится) |
+| `commit_worker_delivery.sh` | Стандартный коммит-скрипт worker'а (тулинг) |
+| `legacy_migrations/` | Одноразовые Holded-миграции: `image_import_*`, `split_big_csv.py` |
 
 ---
 

@@ -1,4 +1,4 @@
-<!-- v: 4 | updated: 2026-04-18T22:30Z -->
+<!-- v: 5 | updated: 2026-04-18T23:00Z -->
 # Espafloria — Master Context
 
 База знаний проекта автоматизации цветочной сети **Espafloria SL** (Barcelona, Spain) на Odoo.sh Custom + Make.com.
@@ -9,53 +9,57 @@
 
 ---
 
-## 🎯 Конечная цель проекта
+## 🎯 Конечная цель
 
-**Умная сеть цветочных магазинов**, где база данных и роботы делают основную работу по контролю сотрудников и структурной целостности бизнеса. Это позволяет экономить на управляющем персонале и направлять деньги на мотивацию полевых сотрудников.
+**Умная сеть цветочных магазинов**, где база и роботы делают основную работу по контролю сотрудников и структурной целостности бизнеса. Это позволяет экономить на управляющем персонале и направлять деньги на мотивацию полевых сотрудников.
 
 Подробно: [`master-context/10_vision_and_roadmap.md`](master-context/10_vision_and_roadmap.md)
 
 ---
 
-## 📚 Структура репозитория
+## 📚 Структура репо
 
-Flat layout: вся база знаний в `master-context/`, артефакты — в подпапках `master-context/artifacts/`.
+Плоская. Всё живёт в `master-context/` на одном уровне — кроме одной подпапки `legacy_migrations/` со старыми одноразовыми скриптами.
 
 ```
-Espafloria/                                    (repo root, local clone:
-├── README.md                                    ~/Documents/master-context/)
-└── master-context/                            ← что грузится в Project knowledge
-    ├── VERSIONS.md                              (sync-маркер)
-    ├── SYNC_STATE.md                            (правило синхронизации)
-    ├── CHANGELOG.md                             (rolling лог сессий)
-    ├── 00_master_index.md                       (навигация + глоссарий)
-    ├── 00_source_files_index.md                 (карта исходников)
-    ├── 01_business_context.md ... 12_ai_workflow.md
-    ├── 99_invariants.md                         (железные правила)
-    └── artifacts/
-        ├── prompts/                           ← грузим в Project
-        ├── templates/                         ← грузим в Project
-        ├── code/
-        │   ├── odoo_actions/                  ← грузим в Project (живые server actions)
-        │   └── migrations/                    ← НЕ грузим (одноразовые Holded-скрипты)
-        ├── scripts/                           ← НЕ грузим (commit_worker_delivery.sh)
-        └── makecom/                           ← НЕ грузим (blueprint JSON, если появится)
+Espafloria/                                      (repo root, local clone:
+├── README.md                                      ~/Documents/master-context/)
+└── master-context/
+    ├── VERSIONS.md                                (sync-маркер)
+    ├── SYNC_STATE.md                              (правило синхронизации)
+    ├── CHANGELOG.md                               (rolling лог сессий)
+    ├── 00_master_index.md                         (навигация + глоссарий)
+    ├── 00_source_files_index.md                   (карта исходников)
+    ├── 01_business_context.md … 12_ai_workflow.md
+    ├── 99_invariants.md                           (железные правила)
+    ├── calculate_in_shop_action.py                ┐
+    ├── migrate_variant_action.py                  │ Odoo server actions
+    ├── review_status_automation.py                ┘
+    ├── prompt_ocr_v1.txt                          ┐
+    ├── prompt_reconciliation_v3.5.txt             │ OpenAI system prompts
+    ├── prompt_diagnostics_v3.1.txt                ┘
+    ├── make_line_log_pack.txt                     ┐ Make.com line-log
+    ├── make_line_log_unit.txt                     ┘ шаблоны
+    ├── commit_worker_delivery.sh                  (worker tooling)
+    └── legacy_migrations/                         ← единственная подпапка
+        ├── image_import_from_holded_api.py
+        ├── image_import_from_urls.py
+        └── split_big_csv.py
 ```
 
-### Как Owner'у обновлять Claude Project knowledge
+### Как Owner'у обновлять Project knowledge
 
-После каждого коммита worker'а:
+После каждого worker-коммита:
 
-1. **Очисти** Project knowledge полностью (удали старые файлы)
+1. **Очисти** Project knowledge полностью
 2. В Finder открой `~/Documents/master-context/master-context/`
-3. Drag-drop в Project knowledge по очереди:
-   - Все `.md` из корня `master-context/` (⌘A по содержимому, **сними выделение с папки `artifacts/`**)
-   - Содержимое `artifacts/prompts/`
-   - Содержимое `artifacts/templates/`
-   - Содержимое `artifacts/code/odoo_actions/`
-4. **Не заливай** `artifacts/code/migrations/`, `artifacts/scripts/`, `artifacts/makecom/` — слишком узкоспециальные или тяжёлые, worker достанет из локального клона если понадобится
+3. **⌘A** по всему содержимому
+4. **⌘-клик по папке `legacy_migrations/`** — сними с неё выделение
+5. Drag-drop в Project knowledge
 
-Финальный sync-check: `v` у `VERSIONS.md` в Project должен совпадать с `v` в GitHub. См. [`master-context/SYNC_STATE.md`](master-context/SYNC_STATE.md).
+Одно действие. Всё нужное залито, старые migrations/скрипты оставлены в git.
+
+Финальный sync-check: `v` у `VERSIONS.md` в Project = `v` в GitHub. См. [`master-context/SYNC_STATE.md`](master-context/SYNC_STATE.md).
 
 ---
 
@@ -68,10 +72,7 @@ Espafloria/                                    (repo root, local clone:
 <!-- v: N | updated: YYYY-MM-DDTHH:MMZ -->
 ```
 
-- `v` — integer, **инкрементится при каждом значимом изменении** контента
-- `updated` — ISO 8601 timestamp в UTC
-
-При правке файла: обновить header → обновить строку в `VERSIONS.md` → bump сам `VERSIONS.md`.
+`v` — integer, инкрементится при каждом значимом изменении. При правке: обновить header → обновить строку в `VERSIONS.md` → bump сам `VERSIONS.md`.
 
 Полный worker-протокол (стадии, sandbox-delivery, commit-скрипт) — в [`master-context/12_ai_workflow.md`](master-context/12_ai_workflow.md).
 
@@ -91,7 +92,7 @@ Espafloria/                                    (repo root, local clone:
 ## 🔗 Внешние ресурсы
 
 - **Odoo прод:** https://espafloriasl.odoo.com
-- **Make.com:** сценарий «Integration Telegram Bot» (55 модулей)
+- **Make.com:** сценарий «Integration Telegram Bot» (55 модулей, достаём через Make MCP)
 - **Google Sheets (ETL products):** [link](https://docs.google.com/spreadsheets/d/1ep4WA5ciu2R1-mVx9Ish2dGH1s9kdjVECGkkGBCsBaE)
 - **Google Sheets (ETL albaran):** [link](https://docs.google.com/spreadsheets/d/1apNcpf7-44OGQVb39wNfZBU7INv3iyTGEFsZVOvH_58)
 - **Регламент сотрудников:** Google Doc (legacy, Holded-based)
@@ -108,4 +109,4 @@ Espafloria/                                    (repo root, local clone:
 
 ## 🔒 Приватность
 
-Приватный репозиторий. Не добавлять в `.md`: реальные API keys / tokens / passwords, персональные данные клиентов, полные дампы БД.
+Приватный репозиторий. Не добавлять в файлы: реальные API keys / tokens / passwords, персональные данные клиентов, полные дампы БД.

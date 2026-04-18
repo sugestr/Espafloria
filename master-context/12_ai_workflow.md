@@ -1,4 +1,4 @@
-<!-- v: 5 | updated: 2026-04-18T22:30Z -->
+<!-- v: 6 | updated: 2026-04-18T23:00Z -->
 # 12. AI Workflow
 
 Как несколько чатов Claude работают вместе над базой знаний.
@@ -58,12 +58,12 @@
 7. Выдаёшь Owner'у [handoff-блок](#handoff-блок) и ждёшь «commit».
 8. По команде «commit» — **один DC-вызов**, dry-run:
    ```
-   bash ~/Documents/master-context/master-context/artifacts/scripts/commit_worker_delivery.sh /Users/andriy/Documents/<имя>.zip
+   bash ~/Documents/master-context/master-context/commit_worker_delivery.sh /Users/andriy/Documents/<имя>.zip
    ```
    Скрипт проверит чистоту дерева, сделает `git pull --ff-only`, развернёт zip, покажет `git diff --stat` и commit message, остановится.
 9. Owner смотрит diff, говорит «ок» → тот же скрипт с `--yes`:
    ```
-   bash ~/Documents/master-context/master-context/artifacts/scripts/commit_worker_delivery.sh /Users/andriy/Documents/<имя>.zip --yes
+   bash ~/Documents/master-context/master-context/commit_worker_delivery.sh /Users/andriy/Documents/<имя>.zip --yes
    ```
    Скрипт коммитит (`git commit -F .worker_commitmsg.txt`), пушит, печатает SHA + link + reminder про Project knowledge.
 10. Owner перезаливает Project knowledge из `~/Documents/master-context/master-context/` (drag-drop всех `.md`, **без папки `artifacts/`**). Sync закрыт.
@@ -119,9 +119,15 @@ reads: VERSIONS.md v<N> из Project
 
 **`master-context/`:** `VERSIONS.md`, `SYNC_STATE.md`, `CHANGELOG.md`, `00_master_index.md`, `00_source_files_index.md`, `01_business_context.md` … `12_ai_workflow.md`, `99_invariants.md`.
 
-**`master-context/artifacts/`** — разделено по частоте использования:
-- **В Project knowledge грузим:** `prompts/` (OpenAI system prompts), `templates/` (Make.com line-log), `code/odoo_actions/` (живые Odoo server actions — `calculate_in_shop`, `migrate_variant`, `review_status`).
-- **Только в git:** `code/migrations/` (одноразовые Holded-миграции), `scripts/` (commit-скрипт), `makecom/` (резерв для blueprint JSON ~230 KB — через Make MCP достаём).
+**`master-context/` на одном уровне с .md** — live-артефакты, которые грузятся в Project knowledge вместе с .md:
+- 3 Odoo server actions (`calculate_in_shop_action.py`, `migrate_variant_action.py`, `review_status_automation.py`)
+- 3 OpenAI prompts (`prompt_ocr_v1.txt`, `prompt_reconciliation_v3.5.txt`, `prompt_diagnostics_v3.1.txt`)
+- 2 Make.com шаблона (`make_line_log_pack.txt`, `make_line_log_unit.txt`)
+- `commit_worker_delivery.sh` — коммит-скрипт worker'а (тулинг, в Project не грузится)
+
+**`master-context/legacy_migrations/`** — единственная подпапка. Одноразовые Holded-миграции (`image_import_from_holded_api.py`, `image_import_from_urls.py`, `split_big_csv.py`). В Project не грузятся, worker читает локально при необходимости.
+
+Make.com blueprint JSON в репо не храним — достаём через Make MCP когда нужен.
 
 ---
 

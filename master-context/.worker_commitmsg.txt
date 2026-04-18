@@ -1,59 +1,46 @@
-Split artifacts/code into odoo_actions and migrations
+Fully flat layout: collapse artifacts/ tree, one subfolder remains
 
-Calibrates what lives in Claude Project knowledge vs what stays only in
-git. Last commit said "don't upload any artifacts to Project", which was
-too strict — the small ones (prompts, templates, live Odoo server actions)
-are referenced often in business discussions and are cheap token-wise.
-Only the one-off Holded migration scripts and heavy binaries should stay
-out of Project.
+Owner flagged that the structure was still too nested: prompts/,
+templates/, code/odoo_actions/, code/migrations/, scripts/ all lived
+under artifacts/, which made the "upload to Project knowledge" step
+still require navigating several subfolders. Flattening further so
+that everything that gets uploaded lives at master-context/ root,
+with a single subfolder for the legacy one-off scripts.
 
-Artifact reorganization
-- artifacts/code/ split into two subfolders:
-  - odoo_actions/     → live Odoo server actions, goes into Project
-      calculate_in_shop_action.py (id=1150)
-      migrate_variant_action.py   (id=1145, supplierinfo patch)
-      review_status_automation.py (id=1146)
-  - migrations/       → one-off Holded conversion scripts, git only
-      image_import_from_holded_api.py
-      image_import_from_urls.py
-      split_big_csv.py
-- 6 git mv preserved file history.
-- Relative .md links in two py files adjusted from ../ to ../../../
-  (one more level of nesting).
-- Make.com blueprint JSON decision reversed: no longer stored in repo.
-  Worker fetches it live through Make MCP when needed. artifacts/makecom/
-  kept as a reserved empty directory in case we want it back later.
+Layout changes (9 git mv)
+- master-context/artifacts/prompts/*.txt       → master-context/  (3 files)
+- master-context/artifacts/templates/*.txt     → master-context/  (2 files)
+- master-context/artifacts/code/odoo_actions/*.py → master-context/  (3 files)
+- master-context/artifacts/scripts/*.sh        → master-context/  (1 file)
+- master-context/artifacts/code/migrations/    → master-context/legacy_migrations/  (3 files, folder rename)
+- artifacts/ folder tree removed entirely (no empty dirs left)
 
-Project knowledge upload rules — now precise
-- Old rule (over-strict): upload only .md, skip all of artifacts/.
-- New rule: upload .md + artifacts/prompts/ + artifacts/templates/ +
-  artifacts/code/odoo_actions/. Skip artifacts/code/migrations/ +
-  artifacts/scripts/ + artifacts/makecom/.
+Relative links in py files restored to plain siblings
+- calculate_in_shop_action.py: ../../../03_odoo_receipt_review.md → 03_odoo_receipt_review.md
+- migrate_variant_action.py:   ../../../06_catalog_migration_toolkit.md → 06_catalog_migration_toolkit.md
 
-Files touched
-- README.md v3→v4: structure diagram + upload checklist updated
-- VERSIONS.md v6→v7: artifacts block rewritten by group
-- SYNC_STATE.md v5→v6: upload rules block added
-- CHANGELOG.md v7→v8: new rolling entry at top
-- 12_ai_workflow.md v4→v5: Состав базы section updated for split
-- 00_master_index.md v6→v7: Artifacts tables split into "in Project" /
-  "git only"; Make blueprint row now points to Make MCP
-- 00_source_files_index.md v3→v4: full rewrite of artifacts section into
-  three groups (in Project / git only / not in git at all)
-- artifacts/code/odoo_actions/calculate_in_shop_action.py: ../ → ../../../
-- artifacts/code/odoo_actions/migrate_variant_action.py: ../ → ../../../
+Documentation reflects flat layout
+- README.md v4→v5: structure diagram + ultra-simple upload checklist
+- VERSIONS.md v7→v8: artifacts listed by name (no subfolders)
+- SYNC_STATE.md v6→v7: upload step reduced to "⌘A then unselect legacy_migrations/"
+- CHANGELOG.md v8→v9: new rolling entry
+- 12_ai_workflow.md v5→v6: "Состав базы" section rewritten, script path updated
+- 00_master_index.md v7→v8: Artifacts tables simplified
+- 00_source_files_index.md v4→v5: sections reorganized around flat file groups
 
-Not touched
-- 01-11, 99_invariants, 02, 03, 04, 05, 06, 07, 08, 09, 10 — business
-  content unchanged.
+Commit script path updated
+- Was: bash ~/Documents/master-context/master-context/artifacts/scripts/commit_worker_delivery.sh
+- Now: bash ~/Documents/master-context/master-context/commit_worker_delivery.sh
 
-Owner's upload procedure after this commit
-1. Clear Project knowledge completely.
+Script internals unchanged — it never referenced its own location.
+
+Not touched: 01-11, 99_invariants — business content unchanged.
+
+Owner upload after this commit
+1. Clear Project knowledge
 2. Finder → ~/Documents/master-context/master-context/
-3. Drag-drop in batches:
-   - all .md from master-context/ root (⌘A, unselect artifacts/ folder)
-   - contents of artifacts/prompts/
-   - contents of artifacts/templates/
-   - contents of artifacts/code/odoo_actions/
-4. Do NOT upload: artifacts/code/migrations/, artifacts/scripts/,
-   artifacts/makecom/.
+3. ⌘A
+4. ⌘-click on legacy_migrations/ folder to unselect it
+5. Drag-drop to Project knowledge
+
+One action. Fully flat.

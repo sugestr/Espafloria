@@ -1,4 +1,4 @@
-<!-- v: 6 | updated: 2026-04-18T22:30Z -->
+<!-- v: 7 | updated: 2026-04-18T23:00Z -->
 # SYNC_STATE
 
 **Один вопрос:** актуальна ли база знаний в Claude Project по сравнению с GitHub?
@@ -6,32 +6,29 @@
 **Один ответ:** сравни `v` у `VERSIONS.md` в Project с `v` у `VERSIONS.md` в GitHub.
 
 - **Равны** → работай.
-- **Project < GitHub** → перезалей Project из локального клона (см. правила ниже).
+- **Project < GitHub** → перезалей Project из локального клона (см. правило ниже).
 - **Project > GitHub** → процессный баг, зови Owner.
 
 ---
 
-## Что заливать в Project knowledge
+## Как Owner заливает Project knowledge
 
-Из `~/Documents/master-context/master-context/`:
+Структура плоская: почти всё — на одном уровне в `master-context/`, только `legacy_migrations/` — в подпапке.
 
-- ✅ Все `.md` в корне (`00_*`, `01_*` … `12_*`, `99_*`, `CHANGELOG`, `SYNC_STATE`, `VERSIONS`)
-- ✅ `artifacts/prompts/` (OpenAI system prompts — мелкие, нужны для обсуждения бота)
-- ✅ `artifacts/templates/` (Make.com line-log шаблоны)
-- ✅ `artifacts/code/odoo_actions/` (живые Odoo server actions, обсуждаются часто)
+1. Finder → `~/Documents/master-context/master-context/`
+2. ⌘A
+3. **Сними выделение с папки `legacy_migrations/`** (это одноразовые старые скрипты, не нужны в оперативе)
+4. Drag-drop всё остальное в Claude Project knowledge
 
-Не заливаем:
-- ❌ `artifacts/code/migrations/` (одноразовые Holded-миграции, лежат в git, достаём вручную если понадобится)
-- ❌ `artifacts/scripts/` (shell-скрипты протокола, Claude они не нужны в Project)
-- ❌ `artifacts/makecom/` (если там окажется blueprint JSON — он ~230 KB, слишком тяжёлый; достаём через Make MCP)
+Одно движение. Всё остальное — уже отфильтровано структурой.
 
 ---
 
 ## Текущее состояние
 
 ```yaml
-versions_md_current: 7
-last_session: "Split artifacts/code into odoo_actions + migrations"
+versions_md_current: 8
+last_session: "Fully flat layout"
 last_session_date: 2026-04-18
 github_repo: sugestr/Espafloria
 github_path: master-context/
