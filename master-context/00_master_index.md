@@ -1,4 +1,4 @@
-<!-- v: 8 | updated: 2026-04-18T23:00Z -->
+<!-- v: 9 | updated: 2026-04-19T12:30Z -->
 # Master Context — Espafloria Odoo Automation
 
 **Last updated:** 2026-04-18
@@ -78,12 +78,14 @@
 | `prompt_diagnostics_v3.1.txt` | OpenAI diagnostics (модуль 167) |
 | `make_line_log_pack.txt` | Make.com шаблон — пачечная ветка |
 | `make_line_log_unit.txt` | Make.com шаблон — штучная ветка |
+| `commit_worker_delivery.sh` | Коммит-скрипт worker'а; Claude его не использует, но в drag-drop попадает (~3 KB) |
+
+Note: в Project knowledge точки в именах заменяются на `_` (`prompt_reconciliation_v3_5.txt` vs `v3.5.txt` в репо). См. [02_makecom_bot.md § Промпты](02_makecom_bot.md).
 
 **В Project knowledge не грузятся (есть в репо, достаются по запросу):**
 
 | Файл / папка | Что это |
 |---|---|
-| `commit_worker_delivery.sh` | Стандартный коммит-скрипт worker'а (тулинг) |
 | `legacy_migrations/` | Одноразовые Holded-миграции: `image_import_*`, `split_big_csv.py` |
 
 ---

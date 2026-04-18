@@ -1,4 +1,4 @@
-<!-- v: 6 | updated: 2026-04-18T23:30Z -->
+<!-- v: 7 | updated: 2026-04-19T12:30Z -->
 # Espafloria — Master Context
 
 База знаний проекта автоматизации цветочной сети **Espafloria SL** (Barcelona, Spain) на Odoo.sh Custom + Make.com.
@@ -53,17 +53,9 @@ Espafloria/                                      (repo root, local clone:
 
 ### Как Owner'у обновлять Project knowledge
 
-После каждого worker-коммита:
+Процесс полностью описан в [`SYNC_STATE.md § Upload`](SYNC_STATE.md#upload-в-project-knowledge). Одно движение: удалить старое → ⌘A в `master-context/master-context/` → снять выделение с `legacy_migrations/` → drag-drop.
 
-1. **Очисти** Project knowledge полностью
-2. В Finder открой `~/Documents/master-context/master-context/`
-3. **⌘A** по всему содержимому
-4. **⌘-клик по папке `legacy_migrations/`** — сними с неё выделение
-5. Drag-drop в Project knowledge
-
-Одно движение. Stub-README в корне репо игнорируем (он только для GitHub).
-
-Финальный sync-check: `v` у `VERSIONS.md` в Project = `v` в GitHub. См. [`SYNC_STATE.md`](SYNC_STATE.md).
+Sync-check после: `v` у `VERSIONS.md` в Project = `v` в GitHub.
 
 ---
 
@@ -85,11 +77,11 @@ Espafloria/                                      (repo root, local clone:
 ## 🤖 Использование в AI-чатах
 
 Новая сессия:
-1. Убедиться, что Project knowledge свежий (sync-check по `VERSIONS.md`)
-2. В первом сообщении worker пишет Self-ID (role / task / local_repo / reads VERSIONS v)
+1. Убедиться, что Project knowledge свежий (sync-check по `VERSIONS.md`, см. [`SYNC_STATE.md`](SYNC_STATE.md))
+2. Worker пишет Self-ID первым сообщением — формат в [`12_ai_workflow.md § Self-ID`](12_ai_workflow.md#self-id-для-worker-чата)
 3. Читает `00_master_index.md` → `99_invariants.md` → файлы по задаче
 
-Подробности — в [`12_ai_workflow.md`](12_ai_workflow.md).
+Полный worker-протокол — [`12_ai_workflow.md`](12_ai_workflow.md).
 
 ---
 

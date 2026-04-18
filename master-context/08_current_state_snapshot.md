@@ -1,4 +1,4 @@
-<!-- v: 2 | updated: 2026-04-18T20:00Z -->
+<!-- v: 3 | updated: 2026-04-19T12:30Z -->
 # 08. Current State Snapshot
 
 **Дата:** 2026-04-18 (после hot-fix session)
@@ -115,7 +115,7 @@ Purchase → Products → фильтр purchase_method = "purchase"
 ⚠️ кол-во не совпало: pedido 25 шт→бумага 20 шт. цена 0.43€→0.73€. Código 199235. /26-Apr-14
 ```
 
-Формат полностью соответствует шаблонам в `templates/make_line_log_*.txt`.
+Формат полностью соответствует шаблонам `make_line_log_*.txt`.
 
 ---
 

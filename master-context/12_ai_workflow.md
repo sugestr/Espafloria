@@ -1,4 +1,4 @@
-<!-- v: 7 | updated: 2026-04-18T23:30Z -->
+<!-- v: 8 | updated: 2026-04-19T12:30Z -->
 # 12. AI Workflow
 
 Как несколько чатов Claude работают вместе над базой знаний.
@@ -41,6 +41,8 @@
 Да: новая бизнес-логика, смена инварианта, новая роль/процесс, новое постоянное поле в модели, смена source-of-truth.
 Нет: разовый bug-fix, debug-скрипт, откачённый эксперимент, мелкий UI-tweak.
 
+**Отдельное правило для snapshot-файлов:** если правил prod-артефакт, копия которого лежит в базе (Odoo server action `*.py`, OpenAI prompt `prompt_*.txt`, Make-шаблон `make_line_log_*.txt`) — **всегда** синкни файл в базе с prod. Это источник правды для следующих чатов.
+
 Правишь `.md` **прямо в нужном месте** — как будто так и было. Не добавляешь «запись о том, что мы сделали X»; бизнес-файлы хранят факты, а не историю.
 
 ### Стадия 3. Зафиксировать через sandbox-delivery
@@ -66,7 +68,11 @@
    bash ~/Documents/master-context/master-context/commit_worker_delivery.sh /Users/andriy/Documents/<имя>.zip --yes
    ```
    Скрипт коммитит (`git commit -F .worker_commitmsg.txt`), пушит, печатает SHA + link + reminder про Project knowledge.
-10. Owner перезаливает Project knowledge из `~/Documents/master-context/master-context/` (drag-drop всех `.md`, **без папки `artifacts/`**). Sync закрыт.
+10. Owner перезаливает Project knowledge по процедуре из [`SYNC_STATE.md § Upload`](SYNC_STATE.md#upload-в-project-knowledge). Sync закрыт.
+
+**Recovery, если что-то пошло не так на шаге 8-10:**
+- Dry-run распаковал не тот zip / Owner передумал → `bash commit_worker_delivery.sh --reset` (откатывает working tree в чистое состояние).
+- `--yes` закоммитил, но `git push` упал (сеть/auth) → Owner просто делает `git -C ~/Documents/master-context push origin main` вручную.
 
 **Типичный worker = ~4 DC-вызова:** git pull в начале, dry-run, `--yes`, ничего больше. 
 
@@ -120,11 +126,13 @@ reads: VERSIONS.md v<N> из Project
 **`master-context/`** (всё грузится в Project knowledge):
 `README.md` (полный, с правилами репо и layout'ом), `VERSIONS.md`, `SYNC_STATE.md`, `CHANGELOG.md`, `00_master_index.md`, `00_source_files_index.md`, `01_business_context.md` … `12_ai_workflow.md`, `99_invariants.md`.
 
-**`master-context/` на одном уровне с .md** — live-артефакты, которые грузятся в Project knowledge вместе с .md:
+**`master-context/` на одном уровне с .md** — live-артефакты и тулинг, всё грузится в Project knowledge вместе с .md:
 - 3 Odoo server actions (`calculate_in_shop_action.py`, `migrate_variant_action.py`, `review_status_automation.py`)
 - 3 OpenAI prompts (`prompt_ocr_v1.txt`, `prompt_reconciliation_v3.5.txt`, `prompt_diagnostics_v3.1.txt`)
 - 2 Make.com шаблона (`make_line_log_pack.txt`, `make_line_log_unit.txt`)
-- `commit_worker_delivery.sh` — коммит-скрипт worker'а (тулинг, в Project не грузится)
+- `commit_worker_delivery.sh` — коммит-скрипт worker'а; Claude его не использует, но в drag-drop попадает (~3 KB, пренебрежимо)
+
+Note: в Project knowledge точки в именах заменяются на подчёркивания (`prompt_reconciliation_v3_5.txt` в Project = `prompt_reconciliation_v3.5.txt` в репо) — особенность Project upload, см. [`02_makecom_bot.md § Промпты — source of truth`](02_makecom_bot.md).
 
 **`master-context/legacy_migrations/`** — единственная подпапка. Одноразовые Holded-миграции (`image_import_from_holded_api.py`, `image_import_from_urls.py`, `split_big_csv.py`). В Project не грузятся, worker читает локально при необходимости.
 
@@ -195,19 +203,13 @@ reads: VERSIONS.md v<N> из Project
 - <критерий 1>
 - <критерий 2>
 
-## 📤 Output (стадия 3)
-sandbox-delivery по протоколу из 12_ai_workflow.md § Три стадии:
-- правки в /home/claude/delivery/master-context/, не в клоне
-- bump v везде где надо, строка в CHANGELOG
-- .worker_commitmsg.txt внутри zip
-- один zip в /mnt/user-data/outputs/, present_files
-- handoff-блок, ждать "commit"
-- по "commit" — bash commit_worker_delivery.sh <zip>, потом --yes
+## 📤 Output
+sandbox-delivery по [§ Три стадии работы worker'а](#три-стадии-работы-workerа). Один zip в `/mnt/user-data/outputs/` через `present_files`, handoff-блок, ждёшь `commit`, потом dry-run + `--yes` через `commit_worker_delivery.sh`.
 
 ## ⚠️ Boundaries
 - не коммить без approve
 - не править файлы в локальном клоне (всё в sandbox)
-- github:* — только read
+- github:* — только read (см. § GitHub MCP)
 - не трогай файлы вне темы
 - 99_invariants.md — только с explicit approval Owner'а
 ```

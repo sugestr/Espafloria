@@ -1,4 +1,4 @@
-<!-- v: 5 | updated: 2026-04-18T23:00Z -->
+<!-- v: 6 | updated: 2026-04-19T12:30Z -->
 # 00. Source Files Index
 
 Карта **исходных файлов** проекта — откуда берётся информация в Master Context.
@@ -45,7 +45,7 @@
 
 ### Worker tooling
 
-- `commit_worker_delivery.sh` — стандартный коммит-скрипт worker'а. В Project knowledge не грузится (Claude не нужен). Используется через terminal. См. [12_ai_workflow.md](12_ai_workflow.md).
+- `commit_worker_delivery.sh` — стандартный коммит-скрипт worker'а. Грузится в Project knowledge вместе с остальными файлами (Claude им не пользуется, но ~3 KB в токенах непринципиально). Вызывается Owner'ом через terminal. См. [12_ai_workflow.md](12_ai_workflow.md).
 
 ### `legacy_migrations/` — одноразовые Holded-миграции
 
@@ -116,7 +116,7 @@ cat ~/Documents/master-context/master-context/legacy_migrations/<file>.py
 | `make_line_log_*.txt` | git + Project knowledge | Мелкие, нужны при обсуждении бота |
 | `*_action.py` / `*_automation.py` (Odoo actions) | git + Project knowledge | Живой prod-код, обсуждается часто |
 | `legacy_migrations/*.py` | только git | Одноразовые, Project не засорять |
-| `commit_worker_delivery.sh` | только git | Тулинг, Claude не нужно |
+| `commit_worker_delivery.sh` | git + Project knowledge | Тулинг; Claude не пользуется, но ~3 KB в drag-drop не мешают |
 | Make blueprint JSON | только Make (через MCP) | ~230 KB, дубликат бесполезен |
 | FLOR-gov PDF | внешний upload по запросу | Reference, 226 стр |
 | Google Docs / Sheets | Google Drive | Living docs |

@@ -1,44 +1,74 @@
-Move README into master-context/, leave GitHub stub at root
+Meta cleanup: flat-layout stale paths, atomic commit-script, upload SoT
 
-Owner flagged that uploading Project knowledge still required two drag-drop
-actions: one for the master-context/ folder and one for the root-level
-README.md. The point of the flat layout is that everything gets uploaded
-in a single action.
+Починены все CRITICAL / MINOR из audit-отчёта 2026-04-19.
 
-Solution: move the full README into master-context/ along with everything
-else. Leave only a minimal 3-line stub at the repo root so GitHub's
-landing page still shows a description and a pointer to the real base.
+## 🔴 CRITICAL
 
-Files touched
-- README.md (repo root): reduced to stub (name + pointer to master-context/README.md)
-- master-context/README.md (new; formally the "moved" version): full
-  content of the former root README, adjusted for its new location
-  (sibling paths to other .md files, note about the root stub)
-- master-context/VERSIONS.md v8→v9: README row moved into main table
-  (no longer marked "repo root"); footnote about the stub
-- master-context/SYNC_STATE.md v7→v8: clarifies that full README is now
-  part of the single drag-drop, root stub stays in git only
-- master-context/CHANGELOG.md v9→v10: new rolling entry at top
-- master-context/12_ai_workflow.md v6→v7:
-  - "Состав базы" section: root is now only the stub, full README lives
-    in master-context/
-  - "См. также" link updated from ../README.md to README.md (sibling)
-  - Reviewer briefing no longer lists "README + master-context/*.md" —
-    all 19 .md live in master-context/ now
+C1 — «artifacts/» (папка-призрак после flat'нинга):
+- commit_worker_delivery.sh: reminder теперь ссылается на SYNC_STATE.md, не упоминает несуществующую artifacts/
+- 12_ai_workflow.md:69: убран «без папки artifacts/», стадия 10 просто делегирует в SYNC_STATE
 
-Side benefit: the full README now gets loaded into Project knowledge on
-every upload, so new worker chats see the repo rules at session start
-without needing an extra upload step.
+C2 — dry-run / --yes атомарность (commit_worker_delivery.sh):
+- Добавлен режим `--reset`: откатывает working tree в чистое состояние (git checkout + git clean). Покрывает recovery если dry-run был ошибочный.
+- --yes теперь верифицирует, что zip совпадает с working tree: сравнивает .worker_commitmsg.txt в zip и в tree через unzip -p | cmp. Защита от «dry-run zipA.zip; --yes zipB.zip» landmine'а.
+- Recovery для «коммит прошёл, push упал» явно задокументирован в 12_ai_workflow.md § Три стадии.
 
-Not touched: 01-11, 99_invariants, 00_master_index, 00_source_files_index —
-nothing about the README move affects business content or navigation.
+C3 (переосмыслённый) — 11 устаревших путей в бизнес-файлах после flat'нинга:
+- 02_makecom_bot.md: 9 refs убраны префиксы prompts/ и templates/
+  (lines 28-34, 72-76, 96, 183, 221, 247, 381, 386)
+- 02_makecom_bot.md:72: blueprint filename → «достаётся через Make MCP»
+  (в репо не хранится, было устаревшее упоминание имени файла)
+- 08_current_state_snapshot.md:118: убран префикс templates/
+- Оригинальный C3 из аудита (dots vs underscores в именах prompts) оказался
+  осознанной фичей: dots в репо, underscores в Project knowledge —
+  явно задокументировано в 02_makecom_bot:28-29. Ничего не меняем.
 
-Owner upload after this commit
-Same as before, single action:
-1. Clear Project knowledge
-2. Finder → ~/Documents/master-context/master-context/
-3. ⌘A
-4. ⌘-click legacy_migrations/ to unselect
-5. Drag-drop
+## 🟡 MINOR
 
-The full README now lands in Project knowledge along with everything else.
+M1 — upload-инструкция теперь единственный источник правды:
+- SYNC_STATE.md § Upload — полная процедура (5 шагов)
+- README.md и commit_worker_delivery.sh reminder — только ссылки
+- Устранено расхождение между 3 разными step-list'ами
+
+M2 — честный факт про commit_worker_delivery.sh в Project knowledge:
+Скрипт физически грузится в Project вместе с drag-drop (⌘A в master-context/). Обновлены 4 файла, которые утверждали обратное:
+- VERSIONS.md: перемещён из «Не грузятся» в «Грузятся»
+- 00_master_index.md: перемещён в таблицу «Грузятся»
+- 00_source_files_index.md § Worker tooling + таблица «Что хранить где»
+- 12_ai_workflow.md § Состав базы
+
+M3 — Self-ID schema один источник правды:
+- 12_ai_workflow.md:104-112 остаётся источником (5 полей)
+- README.md:90: убрано перечисление полей, ссылка на § Self-ID
+
+M4 — Worker briefing сокращён:
+- 12_ai_workflow.md:198-205: убран тезисный повтор § Три стадии, оставлен
+  компактный pointer на протокол + Boundaries.
+
+## 🟢 SUGGESTIONS применены
+
+S1 — `--reset` флаг в commit_worker_delivery.sh (см. C2).
+
+S3 — правило про prod-artifacts sync в 12_ai_workflow.md § Стадия 2:
+явная строка «если правил prod-артефакт (server action, prompt, make template),
+копия которого лежит в базе — всегда синкни».
+
+## Файлы затронуты (10)
+
+- README.md                        v6 → v7
+- VERSIONS.md                      v9 → v10
+- SYNC_STATE.md                    v8 → v9
+- CHANGELOG.md                     v10 → v11
+- 00_master_index.md               v8 → v9
+- 00_source_files_index.md         v5 → v6
+- 02_makecom_bot.md                v3 → v4
+- 08_current_state_snapshot.md     v2 → v3
+- 12_ai_workflow.md                v7 → v8
+- commit_worker_delivery.sh        (не версионируется)
+
+## Файлы НЕ затронуты
+
+Бизнес-контент без filename-refs: 01, 03, 04, 05, 06, 07, 09, 10, 11, 99.
+Все .py / .txt артефакты — без изменений.
+
+Reviewer audit report 2026-04-19 полностью закрыт.
