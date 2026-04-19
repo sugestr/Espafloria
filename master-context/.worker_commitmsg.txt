@@ -1,40 +1,136 @@
-Two transport paths: Claude Code + sandbox-delivery zip, both valid
+Business-logic rebuild: 99 invariants cleaned, POS warehouses fixed, code/ paths flat
 
-После установки Claude Code появился альтернативный путь доставки правок
-помимо zip/sandbox-delivery через web-чат. Фиксируем в базе что **оба пути
-валидны**, выбор — по контексту Owner'а.
+Свежий cross-review всей базы бизнес-логики с prod-сверкой через Odoo MCP
+и внешним brief'ом Owner'а. Правки по аудиту + два уточнения от Owner
+во время сессии: (1) POS warehouse_id=2 у всех 3 касс — config error, не
+намеренно; (2) временные/служебные склады убрать из списка магазинов.
 
 ## Изменения
 
-### 12_ai_workflow.md v8 → v9 (главное)
-- Новая секция «🚚 Два пути доставки правок» (сразу после § Роли):
-  * Path A — Claude Code в терминале на Mac (CLAUDE.md читается автоматически)
-  * Path B — sandbox-delivery через zip + commit_worker_delivery.sh
-  * Таблица «Выбор за 10 секунд»
-  * Явно: правила версионирования/CHANGELOG/bump одинаковы для обоих путей
-- § «Три стадии работы worker'а» теперь с дисклеймером что это детальный
-  протокол Path B; в Path A большинство шагов автоматизировано инструментом
+### 99_invariants.md v2 → v3
+- #2 усилен — влита формулировка старого #35: «Odoo — инструмент отражения,
+  а не диктатор. Система не пишет quantity/packs за флориста автоматически».
+- #25 переформулирован — rolling inventory больше не «правило, которое не
+  реализовано», а forward-looking: первая продажа твёрдого товара =
+  триггер пересчёта в магазине (parallel task, не блокер продажи).
+- #26 переформулирован поведенчески — не факт про Odoo.sh Custom, а правило
+  «не заглубляйся в Custom без необходимости».
+- #27 переформулирован поведенчески — не метрика «19 calls», а правило
+  «каждый новый Odoo-вызов бота = осознанное решение + проверь N+1».
+- #35 ЗАМЕНЁН новым инвариантом (решение Owner 2026-04-19):
+  «Marketplace = юридически посредник, клиент — наш. Комиссия ≠ скидка.
+  Три независимые проводки».
+- Краткая мнемоника дополнена новыми одностроками про Odoo=mirror и
+  Marketplace=intermediary. Footer диапазон 01-09 → 01-11.
 
-### SYNC_STATE.md v9 → v10
-- § Upload в Project knowledge структурирован в два подраздела:
-  * «Рекомендуемый путь — GitHub connector» (primary)
-  * «Fallback — ручной drag-drop» (старая процедура как fallback)
-- versions_md_current → 11, last_session обновлён
+### 01_business_context.md v2 → v3
+- POS warehouse блок: «намеренно или ошибка?» → явный config error P0:
+  создать warehouses для Gloria и Blau, перепривязать POS Gloria/POS Blau.
+- Список магазинов: убраны «временные/служебные склады» — в реальности
+  их нет, путали.
+- §4.10 Flowwow — ссылка на новый инвариант 35 вместо размытой формулировки.
+- Удалена дублирующая секция «## Марктеплейсы» внизу (вместе с опечаткой),
+  содержимое теперь в §4.10 + инвариант 35.
+- User stories 4.x пронумерованы как legacy — добавлена сноска
+  «не перенумеровывать, 09 ссылается на user story 4.5».
 
-### README.md v7 → v8
-- § «Использование в AI-чатах» переписан — раньше описывал только Path B
-  (Self-ID + worker briefing), теперь оба пути с ссылками на 12_ai_workflow
+### 02_makecom_bot.md v4 → v5
+- C1: tax_ids 7/8/68/70 в модуле 11 подписаны как PURCHASE (было ошибочно
+  «Sales»). 04_holded_migration.md явно показывает их как purchase-таблицу,
+  и логически это purchase.order.line — всегда purchase-стороны.
+- C7: Route 1 modernization — точное место вставки дедуп-проверки:
+  расширить domain модуля 108 (search_read purchase.order) до Router 110.
+  Синк с 09 P1.
+- M12: убраны дубли правил промпта (confidence calibration table + match
+  method discipline block) — они живут в prompt_reconciliation_v3.5.txt.
+  В базе остались только архитектурные принципы (pipeline split, safety >
+  coverage, evidence priority, learned code rules). DRY.
 
-### 00_master_index.md (без v bump)
-- Строка «Last updated: 2026-04-18» → «2026-04-19» — sync человеческой метки
-  с header-датой v9. Косметика, v не бампаем (правило из § bump).
+### 03_odoo_receipt_review.md v1 → v2
+- Pred-статус «6 обработанных stock.move» → «18» (сверено через Odoo MCP,
+  IDs 461-478).
+- Таблица «первые 6» → «выборка 5 интересных случаев из 18».
+- Пути к артефактам: `code/review_status_automation.py` и
+  `code/calculate_in_shop_action.py` → без префикса (flat layout).
 
-### VERSIONS.md v10 → v11
-- Bump строк для README (8), SYNC_STATE (10), 12_ai_workflow (9), CHANGELOG (12)
+### 04_holded_migration.md v2 → v3
+- Пути Python-скриптов: `code/` → `legacy_migrations/` (image_import_*.py,
+  split_big_csv.py). И в заголовке раздела, и в usage-блоке.
+- Пример «Категории vs Tags» (PLANTAS EN MACETAS) помечен как иллюстрация
+  из карантинной ветки — принцип работает и для нового каталога.
+- Open work: убраны пункты-дубли с 09 P1 (импорт albaran, продаж, fakтур,
+  name_search override). Оставлено только migration-специфичное
+  (extra images, supplier pricelist history). Отсылка на 09 как tracker.
 
-### CHANGELOG.md v11 → v12
-- Одна строка сверху. 11 записей всего, до потолка 15 далеко.
+### 05_florists_logistics_accountant.md v2 → v3
+- §1.2.4 переписан — «колебание решения Pre-built vs Made-on-sale» заменено
+  на «две формы одного жизненного цикла» с привязкой к инварианту 32.
+  В MVP — приоритет Made-on-sale как частотный POS-кейс.
+- TODO перед MVP: строка про POS warehouse теперь явный Config fix
+  с инструкцией (создать warehouses Gloria/Blau, перепривязать кассы).
+
+### 06_catalog_migration_toolkit.md v1 → v2
+- Путь `code/migrate_variant_action.py` → `migrate_variant_action.py`
+  (flat layout) в «См. также» и в §Server Action.
+
+### 07_infrastructure_devops.md v2 → v3
+- Раздел «Установленные модули»: переработан — вместо непроверенного списка
+  дан «Ядро (должно быть)» + «Дополнительно замечены» + явный disclaimer
+  «проверять через ir.module.module по запросу, не snapshot».
+- Убран Kiwi.com из таблицы MCP (шум).
+- Добавлены кросс-ссылки на инварианты 26, 27 (их новая формулировка).
+
+### 08_current_state_snapshot.md v3 → v4
+- Убран устаревший disclaimer «если фактически 6 полей на purchase.order.line»
+  — prod-сверка подтвердила ровно 5.
+- Stock.move с review-данными: 6 → 18 (prod-сверка).
+- POS warehouse в таблице сущностей теперь с предупреждением
+  «⚠️ config error, см. 09 P0».
+- Путь `legacy_migrations/image_import_from_holded_api.py` обновлён в
+  Integration health.
+- Server actions: пути к code files в flat layout.
+
+### 09_open_work.md v3 → v4
+- P0 Odoo подготовка: добавлена 🔴 задача «Config fix POS warehouses» с
+  явной инструкцией (создать Gloria/Blau warehouses, перепривязать POS).
+- P2 Задания магазину: добавлен bullet про rolling inventory для ваз
+  (ссылка на инвариант 25).
+- P3.2 Flowwow: учётная модель помечена как зафиксированная (инвариант 35),
+  техническая интеграция остаётся open.
+- P3.3 Glovo: то же — ссылка на инвариант 35 для учётной модели.
+- P2 POS: убран пункт «Rolling inventory для ваз» (переехал в Задания
+  магазину, где концептуально правильнее).
+
+### 10_vision_and_roadmap.md v3 → v4
+- Шаг 12 Marketplace: добавлен блок «Учётная модель (решено 2026-04-19,
+  [99 §35]): все marketplace — юридически посредники, клиент — наш,
+  комиссия = наш расход, три независимые проводки».
+- Дата обновления: 2026-04-18 → 2026-04-19.
+
+### VERSIONS.md v11 → v12
+- Bump строк для всех затронутых файлов (01, 02, 03, 04, 05, 06, 07, 08,
+  09, 10, 99), CHANGELOG, себя.
+
+### CHANGELOG.md v12 → v13
+- Одна строка сверху. 13 записей, до потолка 15 ещё запас.
 
 ## Файлы НЕ затронуты
-Бизнес-контент (01-11, 99_invariants), все артефакты (.py, .txt), commit_worker_delivery.sh,
-00_source_files_index.md, 02_makecom_bot.md, 08_current_state_snapshot.md.
+- Мета: README.md, SYNC_STATE.md, 00_master_index.md, 00_source_files_index.md,
+  12_ai_workflow.md (они чистились отдельным мета-аудитом, не в скоупе)
+- Бизнес без правок: 11_crm_and_customers.md (учётная модель marketplace
+  уже неявно отражена через §11.5 + инвариант 35 в 99)
+- Артефакты: calculate_in_shop_action.py, migrate_variant_action.py,
+  review_status_automation.py, prompt_*.txt, make_line_log_*.txt,
+  commit_worker_delivery.sh — prod-правок не было в этой сессии
+
+## Prod-сверка (Odoo MCP)
+Следующие факты сверены и подтверждены:
+- product.supplierinfo = 16 (все VERDNATURA, все product_tmpl_id)
+- pos.config = 3 (все warehouse_id=2, confirmed config error)
+- product.template in quarantine (child_of 207) = 1983
+- custom fields on purchase.order.line = 5 (disclaimer «вдруг 6» снят)
+- custom fields on stock.move = 9
+- server actions 1145/1146/1150 существуют с ожидаемыми бинд-моделями
+- automation id=1 active, watches quantity + x_studio_received_packs
+- purchase.order = 188
+- stock.move with x_studio_review_status = 18 (IDs 461-478)

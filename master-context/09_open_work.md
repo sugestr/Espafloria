@@ -1,4 +1,4 @@
-<!-- v: 3 | updated: 2026-04-18T20:00Z -->
+<!-- v: 4 | updated: 2026-04-19T15:00Z -->
 # 09. Open Work — TODO
 
 Всё, что ещё **не сделано** или сделано частично. Приоритизировано.
@@ -17,7 +17,7 @@
 - [ ] **Walk-through UI для флориста** — проверить receipt UI на планшете
 - [ ] **Тестовая миграция 1 карточки** через обновлённый action 1145 — убедиться, что supplierinfo реально копируется
 - [ ] **Добавить `qty_received` + `qty_invoiced` в view `purchase.order.line`** (Studio, 2 минуты)
-- [ ] **Проверить POS warehouse_id** — сейчас все 3 POS на Plaza (id=2), намеренно или ошибка?
+- [ ] 🔴 **Config fix POS warehouses:** создать warehouses для Gloria и Blau, перепривязать POS Gloria и POS Blau на свои склады. Сейчас все 3 POS на `warehouse_id=2` (Plaza) — это ошибка, не намеренная конфигурация. Каждая касса должна бить продажу в свой склад.
 
 ### Инвентаризация (критично для shadow-запуска БЕЗ продаж в минус)
 - [ ] Физическая инвентаризация срезки + горшечки в 3 магазинах
@@ -40,7 +40,7 @@
 - ❌ Не делает self-check на соответствие totals
 
 **План:**
-1. Добавить search по `(supplier_vat, document_number)` в модуль 108 до входа в Router 110
+1. Расширить domain модуля 108 (search_read purchase.order) на `(supplier_vat, document_number)` — чтобы до входа в Router 110 уже знали про дубль
 2. Поиск карточки (модуль 94) — добавить evidence priority как в Route 2
 3. Опционально: вызвать reconciliation engine даже для нового pedido
 4. Telegram progress bar как в Route 2
@@ -100,6 +100,7 @@
 - [ ] Задания инвентаризации («пересчитай розы до 14:00»)
 - [ ] Фото-отчёты (холодильник / ценники наклеены)
 - [ ] Напоминание о срочной перепечатке ценников
+- [ ] Rolling inventory для ваз/декора: задание пересчёта при первой продаже (см. [99 §25](99_invariants.md))
 - [ ] Контроль выполнения: статус + напоминания при задержке
 
 ### 🆕 Букет как отдельная сущность
@@ -113,7 +114,6 @@
 ### POS
 - [ ] Быстрая сборка букета на месте без line discount
 - [ ] Фото готового букета → sale.order.line
-- [ ] Rolling inventory для ваз (блок завершения до пересчёта)
 
 ### Ценники
 - [ ] Термопринтер setup
@@ -144,16 +144,16 @@
 - [ ] GDPR compliance (opt-in, right to deletion)
 
 ### P3.2 Flowwow integration
-🔴 **CONCEPT** — нет брифа, требует отдельной проектной сессии.
+🔴 **CONCEPT** — учётная модель зафиксирована ([99 §35](99_invariants.md): marketplace = посредник, клиент — наш, комиссия = расход). Техническая интеграция остаётся без брифа.
 
 **Что нужно разобрать:**
-- [ ] Модель учёта комиссии: продажа клиенту + списание комиссии + перевод от площадки
+- [ ] Модель учёта комиссии per-line (комиссия может отличаться по каждому букету)
 - [ ] Импорт продаж из Flowwow (CSV / API?)
 - [ ] Формирование чеков для испанской бухгалтерии (SII требования)
-- [ ] Разделение: продажа ≠ комиссия ≠ cash movement
+- [ ] Три независимые проводки: продажа клиенту / комиссия платформы / cash movement от платформы
 
 ### P3.3 Glovo integration
-🔴 **CONCEPT** — новый workstream.
+🔴 **CONCEPT** — новый workstream. Та же учётная модель что Flowwow ([99 §35](99_invariants.md)).
 
 **Специфика Glovo:**
 - Delivery-first (курьерские окна)
@@ -257,7 +257,7 @@ draft → confirmed → received → unpacked → priced → labeled → on_sale
 ## ⚠️ Deprecated / не доделанное
 
 - `x_studio_many2many_field_4qh_1jkvk330u` («New Tags») — label переименован, но Studio не даёт удалить физически. Можно попробовать через Studio UI вручную.
-- `x_studio_legacy_source` на `product.template` — поле существует (см. [06](06_catalog_migration_toolkit.md), [08](08_current_state_snapshot.md)), но action 1145 фактически не заполняет его на source-записи. Для Variant-side информация хранится в `x_studio_variant_legacy_source`. Можно либо скрыть source-side поле из Studio view, либо начать его использовать — решение открыто.
+- `x_studio_legacy_source` на `product.template` — поле существует, но action 1145 фактически не заполняет его на source-записи (см. [06](06_catalog_migration_toolkit.md) как канон). Для Variant-side информация хранится в `x_studio_variant_legacy_source`. Можно либо скрыть source-side поле из Studio view, либо начать его использовать — решение открыто.
 
 ---
 

@@ -1,4 +1,4 @@
-<!-- v: 2 | updated: 2026-04-18T20:00Z -->
+<!-- v: 3 | updated: 2026-04-19T15:00Z -->
 # 07. Infrastructure & DevOps
 
 ---
@@ -10,7 +10,7 @@
 **URL:** https://espafloriasl.odoo.com
 
 **Тариф:** Custom
-- **Нельзя вернуться на Standard** (после Studio customizations + custom fields — one-way migration)
+- **Нельзя вернуться на Standard** (после Studio customizations + custom fields — one-way migration, см. [99 §26](99_invariants.md))
 - **Нельзя на SaaS Odoo Online** — там закрытая файловая система, не работают внешние API-интеграции
 
 **Почему выбран Custom:**
@@ -45,7 +45,7 @@
 - **Родительский день** (La Merced, Барселона)
 
 **Риск:**
-- Make.com бот = 19 XML-RPC вызовов на один pedido
+- Make.com бот = 19 XML-RPC вызовов на один pedido (см. [99 §27](99_invariants.md))
 - Если в пик приходят 5-10 albaran одновременно → 502 Bad Gateway, зависания UI
 - POS параллельно → таймауты продаж на кассе
 
@@ -81,27 +81,25 @@
 - Правок через Odoo Studio
 - Custom fields
 
-Вы уже на этом пути → обратного билета нет.
+Вы уже на этом пути → обратного билета нет. Поведенческое следствие — [99 §26](99_invariants.md).
 
 ---
 
 ## Установленные модули / локализации
 
-Видно из `list_models`:
+**Ядро (должно быть включено для работы системы):**
+- Spanish localization (`l10n_es.*`) — включая Libros Registro IVA, `l10n_es_edi_facturae`
+- Accounting, Purchase, Inventory, Sales, Point of Sale
+- Studio (для custom fields `x_studio_*`)
+- SII / AEAT-связанные модули (входят в локализацию)
 
-- **Spanish localization** (`l10n_es.*`)
-  - Mod111, Mod115, Mod130, Mod303, Mod347, Mod349, Mod390
-  - Libros Registro de IVA (VAT books)
-  - `l10n_es_edi_facturae` (электронные инвойсы)
-- **SII / AEAT** — см. раздел про compliance
-- **Базовые:**
-  - Accounting, Purchase, Inventory, Sales
-  - Point of Sale
-  - Studio
-  - Project
-  - CRM, Email, Gamification
-- **Документооборот:** `documents.*`, `sign.*`
-- **AI:** `ai.agent`, `ai.topic`, `ai.composer` (встроенный Odoo AI)
+**Дополнительно замечены в сессиях hot-fix:**
+- Project (для системных заданий магазину — см. [05 §1.5](05_florists_logistics_accountant.md))
+- CRM, Email, Gamification
+- `documents.*`, `sign.*`
+- Встроенный Odoo AI (`ai.agent`, `ai.topic`, `ai.composer`)
+
+> ℹ️ Точный список установленных модулей — проверять через `ir.module.module` по запросу (Odoo MCP). Перечень выше отражает наблюдения на 2026-04-18 и ожидаемое ядро; полагаться как на snapshot не стоит — модули могут добавляться/удаляться между сессиями.
 
 ---
 
@@ -111,14 +109,13 @@
 
 | Integration | Для чего | Статус использования |
 |---|---|---|
-| **GitHub MCP** | Source of truth для базы знаний (`sugestr/espafloria`) | 🟢 активно — каждый worker коммитит правки |
+| **GitHub MCP** | Source of truth для базы знаний (`sugestr/Espafloria`) | 🟢 активно — каждый worker коммитит правки |
 | **Odoo MCP** | XML-RPC прямые операции в прод (hot-fix полей, automations, bulk updates) | 🟢 активно при hot-fix сессиях |
 | **Make.com MCP** | Управление scenario / blueprint бота | 🟡 по задаче |
 | Gmail | Email-мониторинг бухгалтерских документов | 🔴 будущее |
 | Google Calendar | Расписание сотрудников | 🔴 будущее |
 | Google Drive | ETL-файлы, sheets, документы | 🟡 по задаче |
 | Miro | Планирование / диаграммы | 🟡 опционально |
-| Kiwi.com | — | ⚫ не используется для цветочного бизнеса |
 
 **Правило:** в начале сессии worker через `tool_search` подгружает нужные MCP по ключевым словам (например, `tool_search("odoo")`), не полагаясь на статический список.
 
@@ -180,3 +177,4 @@
 
 - [08_current_state_snapshot.md](08_current_state_snapshot.md) — текущие метрики и состояние
 - [09_open_work.md](09_open_work.md) — что ещё нужно дожать по compliance и масштабированию
+- [99_invariants.md §26, §27](99_invariants.md) — поведенческие правила про Custom-зависимости и N+1 в боте

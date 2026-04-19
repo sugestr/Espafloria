@@ -1,4 +1,4 @@
-<!-- v: 2 | updated: 2026-04-18T20:00Z -->
+<!-- v: 3 | updated: 2026-04-19T15:00Z -->
 # 04. Миграция из Holded
 
 Статус: 🟢 **PROD** (категории + 1983 товара + фото) / 🟡 **READY** (albaran импорт начат, основной прогон впереди).
@@ -50,9 +50,11 @@ Odoo сам выстраивает дерево.
 - `Product Category` (одна) — учёт, склад, налоги, отчёты
 - `x_studio_botanic_name` (many2many на `product.tag`) — поиск для флористов
 
-**Пример:**
+**Пример (иллюстративно, из карантинного слоя):**
 - Category: `PLANTAS EN MACETAS`
 - Botanical Tags: `EUPHORBIA`, `SUCULENTA`
+
+> ℹ️ Пример взят из карантинной ветки — сам принцип работает и для нового каталога, root-категория у нового будет другая.
 
 ### 3. Внешние ID вместо имён
 
@@ -182,7 +184,7 @@ order_line/price_unit       → Price
 
 ---
 
-## Python-скрипты (в `/code/`)
+## Python-скрипты (в `legacy_migrations/`)
 
 | Файл | Что делает |
 |---|---|
@@ -193,11 +195,11 @@ order_line/price_unit       → Price
 **Usage:**
 ```bash
 # 1. generate from URLs
-python image_import_from_urls.py    # input: img.xlsx → output: odoo_images_import.csv
+python legacy_migrations/image_import_from_urls.py    # input: img.xlsx → output: odoo_images_import.csv
 # 2. generate from Holded API
-python image_import_from_holded_api.py  # input: holded-ids.csv → output: odoo_images_from_holded.csv
+python legacy_migrations/image_import_from_holded_api.py  # input: holded-ids.csv → output: odoo_images_from_holded.csv
 # 3. split for import
-python split_big_csv.py  # 100 rows per file
+python legacy_migrations/split_big_csv.py  # 100 rows per file
 ```
 
 ---
@@ -292,14 +294,12 @@ python split_big_csv.py  # 100 rows per file
 
 ---
 
-## Open work / не завершено
+## Open work / не завершено (migration-специфичное)
 
-- ⬜ **Импорт всех albaran** за 2026 год — в понедельник 21 апреля сажаем сотрудника
-- ⬜ **Импорт всех факту** (Verdnatura специфика: товары отдельно, цены в factura)
-- ⬜ **Импорт всех продаж** за 2026 год — садить **только на старые** (архивные или карантинные) карточки
-- ⬜ **Добавить codigo_fabrica в name_search** — нужен custom module
 - ⬜ **Extra images / gallery** — пока только main image
 - ⬜ **Supplier pricelist history** — не переносится при миграции (будет доработан `Migrate` action)
+
+> Остальная операционная работа по миграции (массовый импорт albaran, impорт продаж, mass migration) — оперативный tracker в [09_open_work.md § P0-P1](09_open_work.md). Здесь не дублируем.
 
 ---
 

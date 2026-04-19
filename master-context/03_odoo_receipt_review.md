@@ -1,7 +1,7 @@
-<!-- v: 1 | updated: 2026-04-18T15:45Z -->
+<!-- v: 2 | updated: 2026-04-19T15:00Z -->
 # 03. Приёмка и Review (stock.move)
 
-Статус: 🟢 **PROD** — работает, 6 обработанных stock.move в проде (первые тестовые).
+Статус: 🟢 **PROD** — работает, 18 stock.move с review-статусами в проде.
 
 ---
 
@@ -74,7 +74,7 @@
 **Watched fields (после hot-fix 18 апреля):** `quantity`, `x_studio_received_packs` (остальные убраны)
 **Server action id:** 1146
 
-**Code:** см. `code/review_status_automation.py`
+**Code:** см. `review_status_automation.py`
 
 **Severity levels:**
 
@@ -105,7 +105,7 @@ level = 3  # vs logist (red) — жёстко перебивает всё
 
 **Server action:** `calculate_in_shop` (id=1150)
 **Binding:** `stock.picking` (list + form view)
-**Code:** см. `code/calculate_in_shop_action.py`
+**Code:** см. `calculate_in_shop_action.py`
 
 ```python
 for picking in records:
@@ -250,7 +250,7 @@ for record in self:
 
 ## Stock move IDs, которые уже обработаны (production tests)
 
-Первые 6 stock.move с заполненными review-полями (состояние на 18 апреля):
+На 2026-04-19 в проде **18 stock.move с заполненным `x_studio_review_status`** (IDs 461-478). Большинство — автостатус «OK»; ниже выборка из 5 интересных случаев (расхождения, пачечный расчёт):
 
 | ID | Paper | Unit | Logist | Qty | Packs | Status | Color |
 |---|---|---|---|---|---|---|---|

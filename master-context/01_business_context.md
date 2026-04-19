@@ -1,4 +1,4 @@
-<!-- v: 2 | updated: 2026-04-18T20:00Z -->
+<!-- v: 3 | updated: 2026-04-19T15:00Z -->
 # 01. Бизнес-контекст
 
 ## Компания
@@ -9,16 +9,13 @@
 - Plaza
 - Gloria
 - Blau
-- (+ временные/служебные склады)
-
-**Основной склад в Odoo:** `Plaza` (все POS-кассы ссылаются на него).
 
 **POS-кассы (3, все активны):**
 - POS Plaza (id=1)
 - POS Gloria (id=2)
 - POS Blau (id=3)
 
-> ⚠️ Все 3 POS в current snapshot привязаны к `warehouse_id=2` (Plaza). Намеренно это или конфигурационная ошибка — не решено, см. TODO в [05_florists_logistics_accountant.md § TODO перед запуском MVP](05_florists_logistics_accountant.md#todo-перед-запуском-mvp-20-апреля) и [08_current_state_snapshot.md](08_current_state_snapshot.md).
+> 🔴 **Config error (P0, фикс до MVP):** все 3 POS сейчас привязаны к `warehouse_id=2` (Plaza). Правильно — каждая касса в своём магазине. Требуется создать warehouses для Gloria и Blau и перепривязать POS Gloria / POS Blau. См. [09_open_work.md § P0](09_open_work.md) и [08_current_state_snapshot.md](08_current_state_snapshot.md).
 
 **Валюта:** EUR
 
@@ -102,6 +99,8 @@ effective_unit_cost = paper_total_amount / actual_received_units
 
 Ниже — 14 кейсов, ради которых строится система.
 
+> ℹ️ Нумерация «4.x» — legacy (остаток от прежней структуры файла). Ссылки на эти user stories встречаются в других .md и в git-истории — не перенумеровывать.
+
 ### 4.1. Ретроспективный импорт albarán из Holded
 **Что:** бухгалтер вносит старый документ вручную, доводит до состояния «правда».
 **Flow:**
@@ -165,8 +164,10 @@ effective_unit_cost = paper_total_amount / actual_received_units
 - Клиент платит площадке
 - Площадка списывает комиссию
 - Переводит остаток
-**Требование:** разделять продажу клиенту ≠ комиссию ≠ перевод от площадки.
-> ⬜ **TODO** — нет брифа по Flowwow/Glovo интеграции. См. [09_open_work.md](09_open_work.md).
+
+**Учётная трактовка (решено 2026-04-19, см. [99 §35](99_invariants.md)):** все marketplace — **юридически посредники**, клиент — наш. Комиссия платформы = наш расход, НЕ скидка клиенту. Клиент, комиссия, перевод — три независимые проводки.
+
+> ⬜ **TODO** — техническая интеграция (API, per-line commission, cash flow) остаётся без брифа. См. [09_open_work.md](09_open_work.md).
 
 ### 4.11. Ошибки флористов при продаже
 **Примеры:** белую розу пробили как красную; забыли списать порчу; пересортица.
@@ -252,15 +253,6 @@ effective_unit_cost = paper_total_amount / actual_received_units
 | Срезка (FLORES CORTADAS) | **Физический пересчёт** |
 | Горшечная (PLANTAS EN MACETAS) | **Физический пересчёт** |
 | Вазы, декор, упаковка, сервисы | Остатки из Holded + rolling correction: при **первой продаже** вазы — обязательный пересчёт именно этих ваз в этом магазине |
-
----
-
-## Марктеплейсы
-
-- **Flowwow** — сайт цветочной доставки, комиссионная модель
-- **Glovo** — delivery marketplace, другая комиссионная модель, курьерские окна
-
-> ⬜ **TODO** — нет брифа по этим интеграциям. Отдельная проектная сессия. См. [09_open_work.md](09_open_work.md).
 
 ---
 

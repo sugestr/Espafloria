@@ -1,4 +1,4 @@
-<!-- v: 4 | updated: 2026-04-19T12:30Z -->
+<!-- v: 5 | updated: 2026-04-19T15:00Z -->
 # 02. Make.com Telegram Bot
 
 Статус: 🟢 **PROD** — работает, обрабатывает 188+ pedido.
@@ -186,11 +186,11 @@ limit: 5, order: "id desc"
 - Model: `gpt-5.4`, T=0, max_tokens=4500
 - Выход: STRICT JSON
 
-**Архитектурные принципы:**
+**Архитектурные принципы (держим здесь как контракт с Make-сценарием):**
 - **Pipeline split:** LLM делает identity matching, Python делает арифметику → LLM не считает, только выбирает
 - **Safety > Coverage:** "A wrong match is worse than an unmatched line"
 - **5 изолированных решений на строку:** candidate / quantity / pack-vs-unit / tax / price action
-- **Evidence priority (финальный порядок):**
+- **Evidence priority (порядок):**
   1. Learned vendor code (`data[k].product_code`)
   2. Operator command (`x_studio_operator_hit`)
   3. Existing plausible assignment
@@ -201,22 +201,7 @@ limit: 5, order: "id desc"
 - **Operator hit ≈ direct command** (override semantic, broad family, line order)
 - **Broad tokens** (`bouquet`, `bqt`, `mix`, `tropical`, `greenery`) — не доказывают identity
 
-**Confidence calibration:**
-- 0.92-0.98 — direct learned vendor code
-- 0.88-0.95 — operator command
-- 0.84-0.91 — fabrication/default code
-- 0.74-0.83 — narrow-identity semantic
-- 0.62-0.73 — weaker assigned card
-- < 0.62 — только manual_review (не dump bucket!)
-
-**Match method discipline:**
-```
-1. supplierinfo_code  (ТОЛЬКО если paper.supplier_sku == data[].product_code)
-2. fabrication_code   (ТОЛЬКО если supplier_sku IN x_studio_codigo_fabrica)
-3. default_code       (ТОЛЬКО если supplier_sku == default_code)
-4. semantic_name
-5. manual_review      (ТОЛЬКО если action = manual_review)
-```
+> ℹ️ Конкретные значения confidence calibration и match method handlers (`supplierinfo_code` / `fabrication_code` / `default_code` / `semantic_name` / `manual_review`) — в самом промпте. База здесь держит только архитектурные принципы, чтобы не дублировать источник правды.
 
 Полный текст: `prompt_reconciliation_v3.5.txt`
 
@@ -362,7 +347,7 @@ STATUS: OK ✅ / WARNING ⚠️ / CRITICAL 🚨
 |---|---|---|
 | Модуль 8 | `partner_id fallback = 38` | Заглушка «unknown vendor» |
 | Модуль 11 | `product_id fallback = 10` | Заглушка «НОВЫЙ ТОВАР» |
-| Модуль 11 | `tax_ids 7, 8, 68, 70` | Sales tax IDs для 10%/21% × goods/services |
+| Модуль 11 | `tax_ids 7, 8, 68, 70` | **Purchase** tax IDs для 10%/21% × goods/services (это purchase.order.line — всегда purchase-стороны). Sales-таблица — в [04](04_holded_migration.md) |
 | Модуль 156, 193 | `uom_id = 31` | «Paquete (Усреднённый)» |
 | Модуль 166 | `subtype_id = 1` | note subtype для mail.message |
 
@@ -427,7 +412,7 @@ Route 1 (создание нового pedido) сейчас **проще** Route
 - Reconciliation engine
 
 **Надо доработать:**
-1. Проверка на дубль `(supplier_vat, document_number)` **до** модуля 8 (сейчас два одинаковых PDF создадут 2 pedido)
+1. Проверка на дубль `(supplier_vat, document_number)` — расширить domain модуля 108 (search_read purchase.order), чтобы **до входа в Router 110** уже знали про существующий pedido. Сейчас два одинаковых PDF создадут 2 pedido.
 2. Использование learned vendor codes при поиске карточки (модуль 94)
 3. Возможно вызов reconciliation engine даже для нового pedido (self-check)
 4. Telegram progress bar как в Route 2

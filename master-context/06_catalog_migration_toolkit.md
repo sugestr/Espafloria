@@ -1,4 +1,4 @@
-<!-- v: 1 | updated: 2026-04-18T15:45Z -->
+<!-- v: 2 | updated: 2026-04-19T15:00Z -->
 # 06. Catalog Migration Toolkit
 
 Статус: 🟢 **PROD** (server action работает) / 🟡 **READY** (инфраструктура готова, массовая миграция не запущена).
@@ -35,7 +35,7 @@
 **Binding:** product form + list view
 **Кнопка:** видна когда `x_studio_target_variant` заполнено и карточка не архивная
 
-**Полный код:** см. `code/migrate_variant_action.py` (обновлён 2026-04-18 с патчем copy supplierinfo).
+**Полный код:** см. `migrate_variant_action.py` (обновлён 2026-04-18 с патчем copy supplierinfo).
 
 ### Что делает action:
 
@@ -253,4 +253,4 @@ record.write({'active': False})
 - [02_makecom_bot.md](02_makecom_bot.md) — как бот использует `product.supplierinfo` для learned codes
 - [04_holded_migration.md](04_holded_migration.md) — откуда берутся карточки в карантине
 - [08_current_state_snapshot.md](08_current_state_snapshot.md) — сколько карточек ожидают миграции (1983)
-- `code/migrate_variant_action.py` — полный код action
+- `migrate_variant_action.py` — полный код action

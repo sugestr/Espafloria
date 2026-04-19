@@ -1,7 +1,7 @@
-<!-- v: 3 | updated: 2026-04-19T12:30Z -->
+<!-- v: 4 | updated: 2026-04-19T15:00Z -->
 # 08. Current State Snapshot
 
-**Дата:** 2026-04-18 (после hot-fix session)
+**Дата:** 2026-04-19 (prod-сверка через Odoo MCP)
 **Цель:** фото системы в текущем состоянии, чтобы не путаться с планами и брифами.
 
 ---
@@ -15,10 +15,10 @@
 | `product.category` | **80+** | Root + 79 в `⛔ Карантин Holded` |
 | `purchase.order` | **188** | ~90% draft с amount_total=0 (импортированные albaran без цен) |
 | `purchase.order.line` | 1000+ | По строкам pedido |
-| `stock.move` с review-данными | **6** | Первые реальные приёмки |
+| `stock.move` с review-данными | **18** | IDs 461-478, большинство OK; выборка интересных — в [03](03_odoo_receipt_review.md) |
 | `product.supplierinfo` (learned codes) | **16** | Только Verdnatura, все на `product_tmpl_id` (не variant) |
 | `res.partner` (поставщики) | десятки | Видимые: Verdnatura (id=42), Serviflor (id=39) |
-| `pos.config` | **3** | POS Plaza, Gloria, Blau (все active, все warehouse_id=2) |
+| `pos.config` | **3** | POS Plaza, Gloria, Blau (все active) — ⚠️ все на `warehouse_id=2`, config error (см. [09 P0](09_open_work.md)) |
 | `base.automation` (активных) | **1** | «Review → generate info conclusion» (id=1) |
 | `ir.actions.server` custom | **3** | 1145 (Migrate), 1146 (review_status), 1150 (calculate_in_shop) |
 
@@ -36,8 +36,6 @@
 | `x_studio_supplier_sku` | char |
 
 **Удалено:** `x_studio_expected_qty_2` (мусорное, «expected_qtyыыыы»).
-
-> ℹ️ Счёт по документации на 2026-04-18 после hot-fix. Если фактически в Odoo 6 полей — отдельный worker со сверкой через Odoo MCP обновит.
 
 ### `stock.move` — **9 полей**
 | Поле | Тип | Related/Compute |
@@ -144,9 +142,9 @@ Purchase → Products → фильтр purchase_method = "purchase"
 
 | ID | Название | Model | Binding | Code file |
 |---|---|---|---|---|
-| 1145 | Migrate to selected variant | product.template | product form+list | `code/migrate_variant_action.py` |
-| 1146 | Execute Code (review status) | stock.move | — (через automation) | `code/review_status_automation.py` |
-| 1150 | calculate_in_shop | stock.picking | stock.picking list+form | `code/calculate_in_shop_action.py` |
+| 1145 | Migrate to selected variant | product.template | product form+list | `migrate_variant_action.py` |
+| 1146 | Execute Code (review status) | stock.move | — (через automation) | `review_status_automation.py` |
+| 1150 | calculate_in_shop | stock.picking | stock.picking list+form | `calculate_in_shop_action.py` |
 
 ---
 
@@ -168,7 +166,7 @@ Purchase → Products → фильтр purchase_method = "purchase"
 - 19 разных вызовов в scenario (см. [02_makecom_bot.md](02_makecom_bot.md))
 
 **Holded → Odoo:**
-- Фотки через Holded API `/products/{id}/image` (скрипт `code/image_import_from_holded_api.py`)
+- Фотки через Holded API `/products/{id}/image` (скрипт `legacy_migrations/image_import_from_holded_api.py`)
 - Товары / категории / albaran через CSV import (вручную)
 
 ---
