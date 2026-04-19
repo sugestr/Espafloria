@@ -1,4 +1,4 @@
-<!-- v: 3 | updated: 2026-04-19T23:30Z -->
+<!-- v: 4 | updated: 2026-04-19T23:45Z -->
 # 06. Catalog Migration Toolkit v2.2
 
 Статус: 🟢 **PROD** — 10 карточек мигрировано (6 доставок + 4 цветка), 100% success. Тесты покрыли edge cases: 1/10/40+ codigos, 1/4 supplierinfo, UOM Units/Paquete, UI и MCP триггеры дают идентичный результат.
@@ -334,6 +334,6 @@ odoo.search_records('product.template',
 - [02_makecom_bot.md](02_makecom_bot.md) — как бот использует supplierinfo для learned codes + OLD_ SKU awareness TODO
 - [04_holded_migration.md](04_holded_migration.md) — откуда берутся карточки в карантине
 - [08_current_state_snapshot.md](08_current_state_snapshot.md) — текущая migration progress
-- [99_invariants.md](99_invariants.md) — §38-42 (новые инварианты из сессии)
+- [99_invariants.md](99_invariants.md) — §38-43 (новые инварианты из сессии)
 - `migrate_variant_action.py` — mirror action 1145 (UI trigger)
 - `migrate_variant_v2.2.py` — mirror action 1176 (execute)

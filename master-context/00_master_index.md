@@ -1,4 +1,4 @@
-<!-- v: 10 | updated: 2026-04-19T23:30Z -->
+<!-- v: 11 | updated: 2026-04-19T23:45Z -->
 # Master Context — Espafloria Odoo Automation
 
 **Last updated:** 2026-04-19
@@ -106,6 +106,13 @@ Note: в Project knowledge точки в именах заменяются на 
 | **Operator hit** | Ручная подсказка оператора для LLM-reconciliation (`x_studio_operator_hit`) |
 | **Карантин Holded** | Категория `⛔ Карантин Holded` (id=207) — все импортированные карточки |
 | **Target variant** | Новая карточка-вариант, в которую мигрирует карантинная (`x_studio_target_variant`) |
+| **OLD_ SKU** | Префикс на `default_code`/`barcode` архивированной source-карточки после миграции v2.2. Освобождает unique constraint для target и помечает «это legacy-карточка» (см. [99 §20/§23](99_invariants.md), [06](06_catalog_migration_toolkit.md)) |
+| **Skeleton** | Пустой target `product.template` с правильной категорией + `list_price=0.0` явно, готовый принять данные с source через migration script v2.2 (см. [06 § SOP](06_catalog_migration_toolkit.md), [99 §38](99_invariants.md)) |
+| **Flat / multivariant target** | Форма target для миграции: flat = 1 template ↔ 1 variant (доставки, моно-розы); multivariant = 1 template ↔ N variants с attributes (напр. Rosa 40/50/60 cm). Определяет куда пишется картинка — template vs variant (см. [99 §39](99_invariants.md)) |
+| **`pos_hr` / advanced employee** | Odoo 19 тиринг прав кассира: minimal (только чеки), basic (+ Cash In/Out), advanced (+ закрытие смены + create product). Задаётся через `pos.config.advanced_employee_ids` (см. [08 § B](08_current_state_snapshot.md)) |
+| **POS Category** | `pos.category` (m2m через `pos_categ_ids`) — UX-группировка на экране кассира. Отличается от `product.category` (categ_id, m2o, бухгалтерская). См. [99 §40](99_invariants.md) |
+| **POS Terminal user** | Dedicated non-admin `res.users` (id=5, login `pos_terminal@espafloria.local`, groups [1, 87]) — один на все 3 планшета касс. Чеки через PIN прилипают к `hr.employee`, не к этому user (см. [08 § C](08_current_state_snapshot.md)) |
+| **Efectivo per-POS** | Каждая касса имеет свой `pos.payment.method` типа cash (EFPL/EFGL/EFBL) — требование Odoo. Одинаковый GL `570001`, разные journal codes для per-POS tracking бухгалтером |
 | **Sentinel -1** | Значение `quantity = -1` = «штуки не пересчитаны флористом», отличать от `0` (реально ничего не приехало) |
 | **VERSIONS.md** | Сводная таблица «файл → v → updated». Версия в header этого файла = маркер состояния всей базы (version-based sync, см. `SYNC_STATE.md`) |
 | **`v` в header** | `<!-- v: N | updated: ... -->` в первой строке каждого `.md`. Bump'ается при каждой значимой правке |
