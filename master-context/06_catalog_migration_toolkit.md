@@ -1,7 +1,7 @@
-<!-- v: 2 | updated: 2026-04-19T15:00Z -->
-# 06. Catalog Migration Toolkit
+<!-- v: 3 | updated: 2026-04-19T23:30Z -->
+# 06. Catalog Migration Toolkit v2.2
 
-Статус: 🟢 **PROD** (server action работает) / 🟡 **READY** (инфраструктура готова, массовая миграция не запущена).
+Статус: 🟢 **PROD** — 10 карточек мигрировано (6 доставок + 4 цветка), 100% success. Тесты покрыли edge cases: 1/10/40+ codigos, 1/4 supplierinfo, UOM Units/Paquete, UI и MCP триггеры дают идентичный результат.
 
 ---
 
@@ -21,236 +21,319 @@
 - Ссылку на legacy source
 - Становится единственным активным владельцем SKU
 
-**Не делается:**
-- Перепривязка старых документов
-- «Слияние» старой в variant (физически невозможно в Odoo)
-- Копирование mail.message / chatter
+**Не делается:** перепривязка старых документов, «слияние» старой в variant, копирование `mail.message` / chatter.
 
 ---
 
-## Server Action: `Migrate to selected variant` (id=1145)
+## Архитектура v2 (3 объекта)
 
-**Модель:** `product.template`
-**Тип:** Execute Code
-**Binding:** product form + list view
-**Кнопка:** видна когда `x_studio_target_variant` заполнено и карточка не архивная
+Миграция построена на паттерне **UI-trigger → flag → automation → execute**:
 
-**Полный код:** см. `migrate_variant_action.py` (обновлён 2026-04-18 с патчем copy supplierinfo).
+| Объект | ID | Model | Роль |
+|---|---|---|---|
+| **UI Trigger** | `ir.actions.server` 1145 | `product.template` | Actions→Migrate menu. Flat-source guard + выставляет `migrate_now=True` на variant → триггерит automation |
+| **Execute v2.2** | `ir.actions.server` 1176 | `product.product` | ВСЯ миграционная логика (single source of truth) |
+| **Automation** | `base.automation` 6 | `product.product` | `trigger=on_create_or_write`, watched `x_studio_migrate_now` (id 27133), filter `[migrate_now=True, target!=False, status!=archived]`, action `[1176]` |
 
-### Что делает action:
+**Два пути запуска (паритет подтверждён):**
+- **UI:** Inventory/Purchase → карточка source → заполнить `Replace With Variant` → Save → Actions → "Migrate to selected variant" → 1145 флипает flag → automation → 1176
+- **MCP/API:** `update_record('product.product', SOURCE_VARIANT_ID, {migrate_now: True, target_variant: TARGET_VARIANT_ID})` → automation → 1176
 
-**1. Валидация target:**
+**Source of truth:** `migrate_variant_action.py` (UI trigger, mirror 1145), `migrate_variant_v2.2.py` (execute, mirror 1176). См. [99 §41](99_invariants.md).
+
+---
+
+## Что переносит v2.2
+
+### Всегда (unconditional) — на target:
+**Template-level:**
+- `x_studio_legacy_source` = source_template.id
+- `x_studio_migration_status` = 'migrated'
+- `available_in_pos` = **True** ← NEW в v2.2 (миграция = готовность к продаже)
+
+**Variant-level:**
+- `x_studio_variant_legacy_source` = source.id
+- `x_studio_variant_migration_status` = 'migrated'
+- `x_studio_migration_note` — полная история (append, разделитель `\n\n`)
+
+### Copy-if-empty — только если target пусто:
+
+| Поле | Уровень | Условие |
+|---|---|---|
+| `default_code` (SKU) | variant | source не пусто |
+| `barcode` | variant | source не пусто |
+| `description_purchase` | variant | source не пусто |
+| `description_sale` | variant | source не пусто |
+| `image_variant_1920` | variant | **multivariant target** + пусто + source image есть |
+| `image_1920` | template | **flat target** + пусто + source image есть |
+| `x_studio_codigo_fabrica` | template | target пусто |
+| `x_studio_holded_url` | template | target пусто |
+| `x_studio_holded_created` | template | target пусто |
+| `list_price` | template | **target = 0.0** ⚠️ см. [99 §38](99_invariants.md) |
+| `standard_price` | template | target = 0.0 |
+
+### Merge (union):
+- `x_studio_botanic_name` (m2m) — target теги не затираются, source добавляются через `(6, 0, union)`
+
+### Supplierinfo (learned vendor codes):
+- Копируются через `si.copy()` (автоматом: partner_id, product_code, product_name, price, uom_id, date_start, date_end, currency_id, sequence, min_qty, delay, company_id)
+- **Дедупликация** по `(partner_id, product_code)` против уже существующих на target
+- `product_id` в copy: `False` для flat target, `target.id` для multivariant
+
+### На source (после переноса):
+- SKU / barcode получают префикс `OLD_` (освобождает unique constraint)
+- `x_studio_migration_status` = 'archived'
+- `active` = False (write на template level, cascade на variant — см. [99 §42](99_invariants.md))
+- `x_studio_migrate_now` = False (try/except на случай если archived variant не даёт write)
+
+---
+
+## Форма target: flat vs multivariant
+
 ```python
-if not record.x_studio_target_variant:
-    raise UserError("Fill 'Replace With Variant' first.")
-target = record.x_studio_target_variant
-if target.id == record.id:
-    raise UserError("Target variant cannot be the same record.")
-if not target.active:
-    raise UserError("Target variant is archived.")
-if target.x_studio_variant_legacy_source:
-    raise UserError("This variant has already been used as a migration target.")
-# target не в карантинной ветке
-if target.product_tmpl_id.categ_id.id in quarantine_ids:
-    raise UserError("You cannot migrate into a quarantine category.")
+target_is_flat = len(target_template.product_variant_ids) == 1
 ```
 
-**2. Освобождение SKU/barcode на старой карточке:**
+**Flat target (1 template = 1 variant):**
+- Картинка → `template.image_1920` (POS тайлы читают template-level, см. [99 §39](99_invariants.md))
+- Supplierinfo copy с `product_id=False` (привязка ко всему template)
+
+**Multivariant target (1 template = N variants):**
+- Картинка → `variant.image_variant_1920` (чтобы варианты отличались визуально на кассе)
+- Supplierinfo copy с `product_id=target.id` (привязка к конкретному variant)
+
+Все 10 мигрированных карточек — flat→flat. Multivariant target на реальных данных ещё не тестировался (будет при миграции Rosa Red Naomi с attributes 40/50/60 cm).
+
+---
+
+## Guards (защита от ошибок)
+
+Скрипт raise `UserError` в следующих случаях:
+
+1. Source не flat (multi-variant source не поддерживается)
+2. `Replace With Variant` не заполнен
+3. Target = source (self-migration)
+4. Target и source из одного template (migration loop)
+5. Target archived (template или variant)
+6. Source уже migrated (`status='archived'`)
+7. Target уже используется как destination для другого source
+8. Target template в карантинной категории (`child_of 207`)
+
+UserError пробрасывается через automation к UI — пользователь видит понятное сообщение.
+
+---
+
+## SOP: создание target skeleton
+
+Перед миграцией target template должен существовать (через UI, MCP, или CSV-import).
+
+### Rule 1: `list_price=0.0` ВСЕГДА явно
+Odoo ставит `list_price=1.0` default при create. Copy-if-empty не сработает — 1.0 truthy. Цена с source НЕ переедет (инвариант [99 §38](99_invariants.md)).
+
 ```python
-record.write({
-    'default_code': 'OLD_' + old_code,  # 8400010 → OLD_8400010
-    'barcode':     'OLD_' + old_barcode,
-    'x_studio_migration_status': 'archived',
+env['product.template'].create({
+    "name": "Rosa Red Naomi - flor",
+    "categ_id": 288,
+    "list_price": 0.0,  # ← ОБЯЗАТЕЛЬНО
+    "type": "consu",
+    "is_storable": True,
+    ...
 })
 ```
 
-**3. Формирование migration note** (текстовая справка на новой карточке):
+В UI после save проверить что sales_price=0.00 (если 1.00 — вручную 0).
+
+### Rule 2: Правильные налоги
+- Цветы срезанные (`Flores Cortadas/*`): `taxes_id=[82]` (10% G sale), `supplier_taxes_id=[68]` (10% G purchase)
+- Услуги (доставки): `taxes_id=[5]` (21% G sale), supplier tax 21%
+- Аксессуары (керамика, упаковка): `taxes_id=[5]` (21% G)
+
+Post-migration bulk tax adjust — см. [09](09_open_work.md).
+
+### Rule 3: Type и storable
+- Цветы срезанные: `type="consu"`, `is_storable=True`
+- Доставки/услуги: `type="service"` (`is_storable` не нужно)
+- `invoice_policy="order"`, `purchase_method="purchase"` (bill по заказу для цветов — см. [99 §18](99_invariants.md))
+
+### Rule 4: Категория
+Target template в не-карантинной категории. Иначе guard 8 заблокирует миграцию.
+
+### Rule 5: `available_in_pos` — не важно что ставишь
+Скрипт v2.2 всё равно перепишет в True.
+
+### Rule 6: НЕ заполнять заранее SKU / codigo / картинку / list_price>0
+Они переедут с source. Если указать — source данные не запишутся (copy-if-empty). **Исключение:** CSV-import с ценами до миграции сохранит их (респект manual corrections).
+
+---
+
+## Category tree (создано 2026-04-19)
+
 ```
-Migrated from old product:
-[8400010] 🚫 CRISANTEMO RAMI - MIX -flor
-Old category: ⛔ Карантин Holded / FLORES CORTADAS / ...
-Old SKU: 8400010
-Old barcode: ...
-Old codigo fabrica: ...
-Holded created: 2024-03-15
-Holded URL: https://...
+287 Flores Cortadas (root, NEW)
+├── 288 Rosa Uniflora (m2o roses, 1 template per variety)
+├── 289 Ramas y Follaje (branches: eucalipto, marfull, etc.)
+└── 290 Flores Variadas (mixed: chrysanthemum mix, etc.)
+
+286 Deliveries (root, существовал)
+
+207 ⛔ Карантин Holded (root, legacy, ~1500 archived-mass + unmigrated)
 ```
 
-**4. Перенос данных в target variant:**
-- `default_code` (bare, без OLD_)
-- `barcode` (bare)
-- `image_variant_1920` (именно в variant, не в template!)
-- `description_purchase`, `description_sale`
-- `x_studio_codigo_fabrica`, `x_studio_holded_url`, `x_studio_holded_created`
-- `x_studio_botanic_name` (many2many tags)
-- `x_studio_migration_note` (append, если уже был)
-- `x_studio_variant_legacy_source = record.id`
-- `x_studio_variant_migration_status = 'migrated'`
+**POS Category (`pos_categ_ids`) — отдельное дерево**, не настроено ещё. Это блокер для UX кассира — см. [09 P0](09_open_work.md) и [99 §40](99_invariants.md).
 
-**5. 🆕 Копирование supplierinfo (patch 2026-04-18):**
+---
+
+## ID Registry — 10 мигрированных карточек (2026-04-19)
+
+### Deliveries (все flat→flat, categ 286)
+
+| Source tmpl/variant | SKU | → | Target tmpl | Target variant | Name | Sales | Cost |
+|---|---|---|---|---|---|---|---|
+| 6840 | BCN-EXPRES | → | 7828 | 7844 | Entrega Express Barcelona | 24.71 € | 15.90 € |
+| 6841 | BCN-OTRO | → | 7829 | 7845 | Entrega Otras Ciudades | 0 € | 19.80 € |
+| 6842 | BCN-GLOVO | → | 7830 | 7846 | Entrega Taxi o Glovo | 0 € | 0 € |
+| 6843 | BCN-1 | → | 7831 | 7847 | Entrega Barcelona Zona 1 | 14.83 € | 9.90 € |
+| 6844 | BCN-2 | → | 7832 | 7848 | Entrega Barcelona Zona 2 | 19.79 € | 14.85 € |
+| 6845 | BCN-3 | → | 7833 | 7849 | Entrega Barcelona Zona 3 | 28.84 € | 19.80 € |
+
+BCN-OTRO и BCN-GLOVO list_price=0 by design — цена per-sale выставляется кассиром.
+
+### Flores (все flat→flat)
+
+| Source | SKU | → | Target tmpl | Variant | Name | categ | codigos | supplierinfo |
+|---|---|---|---|---|---|---|---|---|
+| 7696 | 8400749 | → | 7834 | 7850 | Rosa Red Naomi - flor | 288 | 1 (170062) | 1 (299) |
+| 7473 | 8400253 | → | 7835 | 7851 | Marfull (Madroño/Photinia) - rama | 289 | 10 в строке | 1 (300) |
+| 7446 | 8400020 | → | 7837 | 7853 | Eucalipto Cinerea - rama | 289 | 4 | 1 (301) UOM=Paquete |
+| 7304 | 8400010 | → | 7836 | 7852 | Crisantemo Rami Mix - flor | 290 | 40+ | **4** (302-305) |
+
+Все source archived, OLD_ префикс на SKU/barcode, `x_studio_migration_status='archived'`.
+
+---
+
+## Validation matrix
+
+| Edge case | Tested on | Результат |
+|---|---|---|
+| Simple 1:1:1 (1 codigo, 1 supplier, flat→flat) | ROSA (MCP) | ✅ |
+| Multi-codigo SKU в одной строке (10) | MARFULL (MCP) | ✅ |
+| UOM Paquete на supplier (≠ Units на template) | EUCALIPTO (MCP) | ✅ UOM переехал через copy() |
+| Stress: 40+ codigos + 4 supplierinfo с уникальными product_codes | CRISANTEMO (UI) | ✅ Dedup отработал |
+| Service type (доставки) | 6 deliveries (MCP+UI) | ✅ |
+| Consu + is_storable (цветы) | 4 flores | ✅ |
+| UI trigger vs MCP trigger паритет | CRISANTEMO UI vs MCP | ✅ Идентичный результат |
+| Rollback (restore active + clear migration fields) | Deliveries первый прогон | ✅ Full cycle retry |
+| Odoo 19 template/variant active desync | Deliveries rollback | ✅ template-level write cascade |
+
+**Не покрыто (для следующих версий):**
+- Multivariant target — ждёт первую multivariant карточку (rose attributes)
+- Multivariant source — сейчас explicit `UserError` («not supported»)
+- Migration с `pos_categ_ids` — пока POS categories не настроены
+- Bulk wizard — сейчас одиночные write, не batch
+
+---
+
+## Известные баги и фиксы
+
+### BUG-1: `list_price` default 1.0 блокирует перенос (workaround)
+**Симптом:** после миграции target.list_price=1.0 вместо значения с source.
+**Причина:** Odoo `create` ставит `list_price=1.0` default. Copy-if-empty rule `if old_list_price and not target.list_price` → `not 1.0 = False` → цена НЕ записывается.
+**Fix:** при создании skeleton ВСЕГДА передавать `list_price: 0.0` явно. Закреплено в Rule 1 и [99 §38](99_invariants.md).
+**Не применённый alt:** изменить на `target.list_price <= 1.0` — но 1.0 может быть осмысленной ценой, не хотим стирать.
+
+### BUG-2: `available_in_pos` не переносился (fixed в v2.2)
+**Симптом (v2.1):** target не появляется в POS даже если source была `available_in_pos=True`.
+**Причина:** поле не упоминалось в скрипте.
+**Fix v2.2:** `available_in_pos=True` добавлен в `tmpl_vals` безусловно. Обоснование: миграция = готовность к активной продаже. Если user решит иначе — снимет вручную.
+**Verified:** CRISANTEMO UI-миграция автоматически подняла флаг.
+
+---
+
+## Post-migration procedures
+
+### После каждой миграции через UI:
+1. Проверить Migration section на target template (`Replace With Variant` = OLD_..., Status=migrated)
+2. Проверить цены (sales/cost соответствуют source)
+3. Проверить Purchase tab → supplierinfo (vendor codes переехали)
+4. Проверить POS availability (должно быть вкл после v2.2)
+5. В открытой POS session → меню → Reload Data (тайлы обновляются)
+
+### Массовые операции после миграции каталога:
+- **Налоги bulk:** `categ_id child_of 287` → sale tax 82, purchase 68; категории services → tax 5 и покупной 21%. См. [09](09_open_work.md).
+- **POS категории bulk set:** напр. `categ_id=288` → `pos_categ_ids` включают "🌹 Rosas". Зависит от [09](09_open_work.md) настройки `pos.category`.
+- **Holded/bot OLD_ awareness:** bot должен понимать archived carddocument с OLD_ для старых pedido. См. [02](02_makecom_bot.md).
+
+### Rollback (если миграция пошла не так):
 ```python
-old_supplierinfos = env['product.supplierinfo'].search([
-    ('product_tmpl_id', '=', record.id)
-])
-for si in old_supplierinfos:
-    si.copy({
-        'product_tmpl_id': target.product_tmpl_id.id,
-        'product_id': target.id,
-    })
+# Восстановить source template (снять archive, убрать OLD_)
+env['product.template'].browse(SOURCE_TMPL_ID).with_context(active_test=False).write({
+    'active': True,
+    'default_code': ORIGINAL_SKU,  # без OLD_ префикса
+    'barcode': ORIGINAL_BARCODE,
+    'x_studio_migration_status': False,
+    'x_studio_target_variant': False,
+})
+# Удалить/архивировать target template + copied supplierinfo → повторить миграцию
 ```
 
-**Почему copy, а не write:**
-- Старая архивная карточка сохраняет свои supplierinfo → историю в chatter старых pedido не ломаем
-- Новая получает копии → Make.com бот найдёт learned vendor codes для reconciliation
-- Дубли в БД не создают проблемы, они различимы по `product_tmpl_id`
+Проверено на delivery rollback — синхронизация template/variant active корректная.
 
-**6. Архивация старой карточки:**
+---
+
+## Quick reference
+
+**MCP миграция:**
 ```python
-record.write({'active': False})
+# 1. Target skeleton создан (с list_price=0.0!)
+# 2. Флипаем 2 поля на source variant
+odoo.update_record('product.product', SOURCE_VARIANT_ID, {
+    'x_studio_migrate_now': True,
+    'x_studio_target_variant': TARGET_VARIANT_ID,
+})
+# Automation срабатывает synchronously → миграция выполнена
 ```
 
----
+**UI миграция:**
+```
+Inventory → Products → (найти source) → Replace With Variant: <target>
+→ Save → Actions (шестерёнка) → Migrate to selected variant
+```
 
-## Поля миграционного toolkit
-
-### На `product.template` (source-side)
-
-| Поле | Тип | Назначение |
-|---|---|---|
-| `x_studio_target_variant` | many2one → product.product | Куда мигрировать |
-| `x_studio_migration_status` | selection | `quarantine` / `mapped` / `migrated` / `archived` |
-| `x_studio_legacy_source` | many2one → product.product | (была запись, теперь не обязательна) |
-
-### На `product.product` (target variant-side)
-
-| Поле | Тип | Назначение |
-|---|---|---|
-| `x_studio_variant_legacy_source` | many2one → product.template | Ссылка на исходную (архивную) карточку |
-| `x_studio_variant_migration_status` | selection | `migrated` (после action) |
-| `x_studio_migration_note` | text | Текстовая history-справка |
-| `x_studio_botanic_name` | many2many → product.tag | Ботанические теги (related от template) |
-
-### Selection values для migration_status:
-
-| Value | Label | Смысл |
-|---|---|---|
-| `quarantine` | quarantine | В карантине, не обработана |
-| `ready` | **mapped** | `x_studio_target_variant` выбран, готова к миграции |
-| `migrated` | migrated | Мигрирована |
-| `archived` | archived | Старая карточка архивирована |
-
----
-
-## Domain для поля Replace With Variant
-
+**Проверка результата (MCP):**
 ```python
-[
-    ('active', '=', True),
-    ('x_studio_variant_legacy_source', '=', False),
-    '!', ('product_tmpl_id.categ_id', 'child_of', 207)
-]
+odoo.search_records('product.template',
+    domain=[['id', '=', TARGET_TMPL_ID]],
+    fields=['default_code', 'list_price', 'x_studio_codigo_fabrica',
+            'x_studio_legacy_source', 'x_studio_migration_status',
+            'available_in_pos', 'seller_ids'])
 ```
 
-**Защита:**
-1. Только активные variants
-2. Только не использованные как target (избегаем повторной миграции)
-3. Не из карантина (не мигрировать в него же)
+---
 
-**⚠️ Гоча:** domain через `('product_tmpl_id.categ_id.complete_name', 'not ilike', ...)` в many2one popup оказался нестабилен — отрезал почти всё. Рабочий путь — через `child_of` по ID.
+## Future work (не в v2.2)
+
+- [ ] **Multivariant target** — тест на первой rose-multivariant
+- [ ] **Multivariant source** — сейчас raise UserError
+- [ ] **Bulk migration UI** (multi-select, batch) — для массовой миграции ~100-200 активных карточек
+- [ ] **Dry-run mode** — preview without write
+- [ ] **Migration log model** — сейчас история в `x_studio_migration_note` (text field); для аудита лучше отдельная `migration.log` модель
 
 ---
 
-## SOP: миграция одной карточки
+## Revision history
 
-**На старой карточке:**
-1. Убедиться, что это source из карантина (`categ_id` child_of 207)
-2. Создать или выбрать нужный **target variant** (в новом каталоге, не в карантине)
-3. В поле **Replace With Variant** выбрать target
-4. Сохранить карточку
-5. Нажать кнопку **Migrate to selected variant**
-
-**Проверка после выполнения:**
-- Source card:
-  - [ ] `default_code = OLD_<old>`
-  - [ ] `barcode = OLD_<old>`
-  - [ ] `x_studio_migration_status = archived`
-  - [ ] `active = False`
-- Target variant:
-  - [ ] Получил старые SKU / barcode (без префикса OLD_)
-  - [ ] `x_studio_variant_legacy_source = <ID старой>`
-  - [ ] `x_studio_variant_migration_status = migrated`
-  - [ ] `x_studio_migration_note` заполнен
-  - [ ] `x_studio_botanic_name` перенесён
-  - [ ] **Копии `product.supplierinfo` появились на новом `product_tmpl_id`**
-- Старые pedido / продажи по-прежнему открывают старую карточку ✅
-
----
-
-## Что НЕ переносится (open work)
-
-| Не переносится | План | Приоритет |
-|---|---|---|
-| `product.pricelist.item` (sales pricelist) | Проверить, есть ли такие | низкий |
-| Vendor pricelist rules | Проверить | низкий |
-| `mail.message` chatter | By design — остаётся на старой | — |
-| Attachments на старой карточке | By design — остаётся | — |
-| `stock.putaway.rule` | Проверить | низкий |
-
----
-
-## Массовая миграция (не реализована)
-
-Сейчас action работает **на одну карточку за раз**. Для массовой миграции нужно:
-
-**🔴 CONCEPT:**
-- Batch-wizard (выбрать 100 карточек + уже назначенные target → прогнать action на всех)
-- Queue-механизм (фоновая очередь, чтобы не вешать UI)
-
-**Текущая альтернатива:**
-- Открыть list view карантинных карточек с `x_studio_target_variant != False`
-- Выделить все → server action «Migrate to selected variant» через binding
-- Работать частями (по 20-50 за раз, наблюдая)
-
----
-
-## Типовые проблемы и кейсы
-
-### Пример 1: awkward internal wording
-
-**Было:** у старой карточки name = `[8400253] 🚫 MARFULL - rama`
-**Новая target variant:** `Photinia Red Robin foliage`
-**Holded learned code:** supplier_sku `193815` → привязан к старой
-
-**После миграции:**
-- Supplierinfo `193815` скопирован на новую (Photinia Red Robin)
-- Бот при следующей закупке с `supplier_sku=193815` найдёт learned code на новой
-- Reconciliation engine v3.5 **не снижает confidence** из-за имени (`MARFULL` vs `Photinia`) — главное что learned code match
-
-### Пример 2: Одна старая → несколько новых variants
-
-**Сейчас не поддерживается** — поле `x_studio_target_variant` = one-to-one.
-
-Если нужно разбить старую «[8400010] CRISANTEMO RAMI MIX» на варианты («Purple», «Yellow», «White»):
-- Создать новую template с variants
-- Мигрировать только на один variant (например «Mix»)
-- Остальные варианты — пусты (история не ехала), но будут использоваться для новых закупок
-
-**Альтернатива (future):** расширить action на one-to-many через отдельное поле / wizard.
-
-### Пример 3: Fabrication code переносится, но не default_code
-
-Сейчас action переносит:
-- `default_code` (SKU) → да, в target
-- `x_studio_codigo_fabrica` → да
-- `seller_ids.product_code` (supplierinfo, после 18 апреля patch) → **да, скопировано**
-
-Всё что use в Make.com боте для evidence priority — **переносится**.
+- **v1** — монолитный action 1145 на `product.template`, с patch copy supplierinfo (2026-04-18)
+- **v2** — split на UI trigger 1145 + execute 1176 + automation 6, image fix flat/multivariant, template-level migration fields, цены transfer
+- **v2.1** — patch list_price/standard_price transfer, migration fields на template visible в UI
+- **v2.2 (current)** — `available_in_pos=True` always, migration_note включает "Old available in POS", stress-test dedup подтверждён (2026-04-19)
 
 ---
 
 ## См. также
 
-- [02_makecom_bot.md](02_makecom_bot.md) — как бот использует `product.supplierinfo` для learned codes
+- [02_makecom_bot.md](02_makecom_bot.md) — как бот использует supplierinfo для learned codes + OLD_ SKU awareness TODO
 - [04_holded_migration.md](04_holded_migration.md) — откуда берутся карточки в карантине
-- [08_current_state_snapshot.md](08_current_state_snapshot.md) — сколько карточек ожидают миграции (1983)
-- `migrate_variant_action.py` — полный код action
+- [08_current_state_snapshot.md](08_current_state_snapshot.md) — текущая migration progress
+- [99_invariants.md](99_invariants.md) — §38-42 (новые инварианты из сессии)
+- `migrate_variant_action.py` — mirror action 1145 (UI trigger)
+- `migrate_variant_v2.2.py` — mirror action 1176 (execute)

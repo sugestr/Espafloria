@@ -1,4 +1,4 @@
-<!-- v: 5 | updated: 2026-04-19T15:00Z -->
+<!-- v: 6 | updated: 2026-04-19T23:30Z -->
 # 02. Make.com Telegram Bot
 
 Статус: 🟢 **PROD** — работает, обрабатывает 188+ pedido.
@@ -401,6 +401,22 @@ STATUS: OK ✅ / WARNING ⚠️ / CRITICAL 🚨
 ### Telegram media groups
 - Альбомы (несколько фото) → многократный webhook trigger → дубли pedido
 - Решение: **организационное** — только PDF через нативный сканер ОС
+
+---
+
+## OLD_ SKU awareness — pedido-to-card matching post-migration (TODO)
+
+После миграции каталога v2.2 старая карточка получает префикс `OLD_` на `default_code`/`barcode` и `active=False`, а новый `default_code` без префикса живёт на target-карточке. Это создаёт риск для бота при обработке pedido с **датой до миграции**:
+
+- **Проблема:** albaran от 2026-03-15 с supplier_sku `8400010` должен прилипнуть к OLD_карточке (как было тогда), а не к новой target. Штатный поиск модуля 94 (`search_read product.product` по `default_code`) найдёт только активную target — теряется историческая связность.
+- **Правило:** `if pedido_date < migration_date(source) → матчить archived OLD_ source (префикс OLD_ на default_code)`, иначе → active target.
+
+Где расширять в сценарии:
+- **Модуль 94** («Поиск карточки товара»): доменом search_read добавить OR-ветку по `default_code='OLD_'+supplier_sku` с условием active=False. В prompt reconciliation v3.5 — явно упомянуть что archived OLD_ source card является **valid candidate** если дата pedido до миграции.
+- **Модуль 190 / context**: передавать `migration_date` с target-карточки (можно derive через `create_date` записи `x_studio_legacy_source` на target template, либо ввести explicit Studio-поле `x_studio_migrated_at`).
+- **Evidence priority:** при равных matches по `supplier_sku` — дата pedido становится tie-breaker.
+
+Пока не реализовано. Workaround до реализации: старые pedido с OLD_ не обрабатывать автоматом, помечать в Telegram как «требует manual review» если дата < последней миграции.
 
 ---
 

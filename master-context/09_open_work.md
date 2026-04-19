@@ -1,4 +1,4 @@
-<!-- v: 4 | updated: 2026-04-19T15:00Z -->
+<!-- v: 5 | updated: 2026-04-19T23:30Z -->
 # 09. Open Work — TODO
 
 Всё, что ещё **не сделано** или сделано частично. Приоритизировано.
@@ -14,10 +14,20 @@
 - [ ] Протестировать end-to-end: отправить тестовый PDF в Telegram → убедиться, что весь pipeline отработал
 
 ### Odoo подготовка
-- [ ] **Walk-through UI для флориста** — проверить receipt UI на планшете
-- [ ] **Тестовая миграция 1 карточки** через обновлённый action 1145 — убедиться, что supplierinfo реально копируется
+- [x] ✅ **Walk-through UI для флориста** — первая POS-сессия прошла end-to-end 2026-04-19 (ROSA RED NAOMI 4€ через Efectivo Plaza, ticket 261-1-000002). Планшет-режим работает.
+- [x] ✅ **Тестовая миграция 1 карточки** — мигрировано 10 карточек через v2.2 (6 deliveries + 4 flores). supplierinfo копируется корректно с дедупликацией. См. [06](06_catalog_migration_toolkit.md).
 - [ ] **Добавить `qty_received` + `qty_invoiced` в view `purchase.order.line`** (Studio, 2 минуты)
-- [ ] 🔴 **Config fix POS warehouses:** создать warehouses для Gloria и Blau, перепривязать POS Gloria и POS Blau на свои склады. Сейчас все 3 POS на `warehouse_id=2` (Plaza) — это ошибка, не намеренная конфигурация. Каждая касса должна бить продажу в свой склад.
+- [x] ✅ **Config fix POS warehouses:** склады Plaza/Gloria/Blau (id=2/3/4) существовали. POS Gloria и Blau были привязаны к Plaza — починено 2026-04-19 (warehouse_id через direct RPC write, picking_type через UI). См. [08 §A/§B](08_current_state_snapshot.md).
+
+### Рабочее место флориста (новая P0-секция, приоритет для следующей сессии)
+- [ ] 🔴 **POS Categories setup** — на всех 3 configs `iface_available_categ_ids=[]`. Кассир не может быстро фильтровать Rosas / Ramas / Plantas / Servicios. Создать `pos.category` дерево (~5-8 категорий), bulk-set `pos_categ_ids` на 10 мигрированных карточках.
+- [ ] **POS tile visual test** — открыть POS Plaza, убедиться что 10 мигрированных карточек корректно отображаются как tiles (цена, картинка, имя, VAT).
+- [ ] **End-to-end тест продажи с доставкой** — 3 розы + Entrega Barcelona Zona 1 → Validate → проверить Holded invoice через make.com бота.
+- [ ] **Bulk tax adjustment post-migration:** `categ_id child_of 287` (Flores Cortadas) → sale tax 82 / purchase tax 68 (10% G); услуги Deliveries → sale 5 / purchase 21% G (найти id). Одним bulk-update.
+- [ ] **POS Terminal password change** — смена дефолтного `PosTerminal2026!` на финальный (или убрать login password и положить планшеты в kiosk mode).
+- [ ] **Andriy PIN для manager** — `hr.employee.pin` на Andriy сейчас пуст. Поставить 4-значный PIN для manager-override в POS (approval скидок >10%, закрытие смены, Cash In/Out supervision).
+- [ ] **Cosmetic fix:** POS payment method `Efectivo Blaus` (id=5) → переименовать в `Efectivo Blau` (лишняя s, journal правильный).
+- [ ] **Косметика чека** — загрузить логотип Espafloria, заполнить телефон/адрес компании (сейчас placeholders и false в чеке).
 
 ### Инвентаризация (критично для shadow-запуска БЕЗ продаж в минус)
 - [ ] Физическая инвентаризация срезки + горшечки в 3 магазинах
@@ -60,6 +70,11 @@
 - [ ] Batch wizard для обработки N карточек за раз
 - [ ] Queue-механизм, чтобы не вешать UI
 - [ ] Migration dashboard — сколько migrated / pending / errors
+- [ ] **Multivariant target support в скрипте v2.2** — первая цветочная карточка с attributes (напр. Rosa Red Naomi 40/50/60 cm) → тест ветки `image_variant_1920` + `product_id=target.id` на supplierinfo copy.
+- [ ] **Dry-run mode** — preview без write (полезно для bulk операций).
+
+### Make.com bot: OLD_ SKU awareness
+- [ ] Модуль 94 + prompt reconciliation: при `pedido_date < migration_date(target)` — искать archived OLD_ source карточку. См. [02 § OLD_ SKU awareness](02_makecom_bot.md). Без этой логики старые pedido не найдут свою (уже archived) карточку.
 
 ---
 

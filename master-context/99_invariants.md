@@ -1,4 +1,4 @@
-<!-- v: 3 | updated: 2026-04-19T15:00Z -->
+<!-- v: 4 | updated: 2026-04-19T23:30Z -->
 # 99. Invariants — железные правила проекта
 
 **Читать перед любыми изменениями в системе.** Нарушение этих правил создаёт техдолг, ломает бот или теряет данные.
@@ -236,6 +236,51 @@ Make.com бот зависит от 3 платных сервисов (Make oper
 
 ---
 
+## 🗂️ Миграция каталога v2.2 (добавлено 2026-04-19)
+
+### 38. `list_price=1.0` default блокирует copy-if-empty
+Odoo на `create` ставит `list_price=1.0` по умолчанию. Migration script v2.2 использует правило «copy from source only if target is empty/zero». `1.0` truthy → `not 1.0 = False` → цена с source НЕ переедет.
+
+**Правило:** при создании skeleton template для миграции ВСЕГДА передавать `list_price: 0.0` явно. Проверено на баге ROSA 7834 (list_price застрял 1.0 вместо 3.64 из source) — после фикса MARFULL/EUCALIPTO/CRISANTEMO перенесли цены правильно.
+
+Альтернативный фикс (не применён) — правило `target.list_price <= 1.0`. Не выбран: `1.0` может быть осмысленной ценой, не хотим затирать.
+
+### 39. POS tile image source зависит от формы target
+POS кассир видит картинку карточки из:
+- `product.template.image_1920` — если template flat (1 variant, нет attributes)
+- `product.product.image_variant_1920` — если template multivariant (N variants, чтобы отличаться на кассе)
+
+Migration v2.2 автоматически соблюдает это правило: при `target_is_flat` пишет в template, при multivariant — в variant.
+
+### 40. Product Category ≠ POS Category — разные концепции
+- `product.template.categ_id` (m2o, required) — бухгалтерская/складская категория. Определяет GL accounts (revenue, expense, stock valuation), правила учёта, inventory filters, reporting group-by. Живёт в `product.category` дереве.
+- `product.template.pos_categ_ids` (m2m, optional) — UI-группировка на экране кассира. Определяет под какой кнопкой в POS UI карточка появляется. Одна карточка может быть в нескольких (напр. «Rosas» + «Ramo Regalo»). Живёт в отдельном `pos.category` дереве.
+
+Не смешивать. Product category ~10 штук (стабильная, accounting-driven). POS category ~5-8 (UX-driven, меняется под нужды кассира).
+
+### 41. Scripts: source-of-truth в проекте, Odoo = mirror
+Любой server action / automation rule содержащий Python-код должен иметь source-of-truth `.py` файл в `master-context/`. Odoo — mirror, не источник. Любое изменение одного — обязательная синхронизация второго.
+
+**Причина:** потеря БД = потеря всех скриптов. Плюс файл даёт git-history, review, возможность deploy на staging.
+
+Актуальные пары:
+- `migrate_variant_action.py` ↔ `ir.actions.server id=1145` (UI trigger v2)
+- `migrate_variant_v2.2.py` ↔ `ir.actions.server id=1176` (execute v2.2)
+- `calculate_in_shop_action.py` ↔ `ir.actions.server id=1150`
+- `review_status_automation.py` ↔ `ir.actions.server id=1146`
+
+### 42. Odoo 19: archive/restore делать через template-level write
+При archive-restore операциях писать `active=False` / `active=True` **на template level**, не на variant. Odoo каскадирует template → variants автоматически. Write в `variant.active` может создать desync (template.active=True, variant.active=False).
+
+Проверено на rollback delivery миграции: три template остались `archived=true`, variants `active=true` — исправилось единичным write в template. Правило: `archive source` в v2.2 скрипте пишет в `source_template`, не в `source` (variant).
+
+### 43. Studio-поля на template и variant — писать template-level для UI visibility
+Если Studio-поле существует на обоих уровнях (template direct + variant related) — писать на template. Только так значения гарантированно видны на template form и на всех наследующих views. Variant-only значения могут не пробросить наверх в UI.
+
+Проверено на баге «у Entrega Barcelona Zona 2 секция MIGRATION пустая» (v2.1 писал только variant-level `x_studio_variant_legacy_source`, template-level `x_studio_legacy_source` оставался `false` → на форме Migration section показывал пусто). Fix в v2.2: template-level `legacy_source` + `migration_status` пишутся всегда безусловно.
+
+---
+
 ## Краткая мнемоника
 
 > **Paper ≠ Truth. Receipt = Truth. Logist = hint. -1 ≠ 0. Odoo = mirror, not dictator.**
@@ -244,6 +289,7 @@ Make.com бот зависит от 3 платных сервисов (Make oper
 > **Flowers = ordered policy. Backorder = logistics. Quarantine = no sales.**
 > **History stays. Migration copies supplierinfo. Target != quarantine.**
 > **Marketplace = intermediary. Client is ours. Commission ≠ discount.**
+> **Skeleton → list_price=0. POS tile reads template image if flat. Scripts source-of-truth in repo, Odoo mirror.**
 
 ---
 

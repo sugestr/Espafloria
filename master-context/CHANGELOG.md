@@ -1,4 +1,4 @@
-<!-- v: 13 | updated: 2026-04-19T15:00Z -->
+<!-- v: 14 | updated: 2026-04-19T23:30Z -->
 # CHANGELOG
 
 Одна строка на worker-сессию. Детали — `git log master-context/` или `git show <sha>`.
@@ -7,6 +7,7 @@
 
 ---
 
+- 2026-04-19 — Mega-session: POS launch (3 configs + warehouses fix + POS Terminal user + employee PIN), catalog migration v2.1→v2.2 (10 карточек, 2 бага fixed, category tree Flores Cortadas 287-290), 6 новых инвариантов (§38-43), make.com OLD_ SKU awareness TODO
 - 2026-04-19 — Business-logic rebuild: 99 invariants tightened (2+35 merged, 25/26/27 reformulated, new #35 marketplace); POS warehouse config as P0; code/ path fixes; M-level cleanup across 01-10
 - 2026-04-19 — Two transport paths documented (Claude Code + zip), GitHub connector in SYNC_STATE
 - 2026-04-19 — Meta cleanup: flat-layout stale paths, --reset + zip-match in commit script, upload SoT in SYNC_STATE

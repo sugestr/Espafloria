@@ -1,4 +1,4 @@
-<!-- v: 9 | updated: 2026-04-19T22:15Z -->
+<!-- v: 10 | updated: 2026-04-19T23:30Z -->
 # Master Context — Espafloria Odoo Automation
 
 **Last updated:** 2026-04-19
@@ -71,7 +71,8 @@
 | Файл | Что это |
 |---|---|
 | `calculate_in_shop_action.py` | Odoo server action id=1150 |
-| `migrate_variant_action.py` | Odoo server action id=1145 (с patch supplierinfo) |
+| `migrate_variant_action.py` | Odoo server action id=1145 (UI trigger v2, короткий wrapper) |
+| `migrate_variant_v2.2.py` | Odoo server action id=1176 (execute v2.2, вся миграционная логика) |
 | `review_status_automation.py` | Odoo server action id=1146 |
 | `prompt_ocr_v1.txt` | OpenAI OCR extractor (модуль 3) |
 | `prompt_reconciliation_v3.5.txt` | OpenAI reconciliation engine (модуль 149) |
