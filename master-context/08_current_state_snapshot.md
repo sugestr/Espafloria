@@ -1,7 +1,7 @@
-<!-- v: 5 | updated: 2026-04-19T23:30Z -->
+<!-- v: 6 | updated: 2026-04-21T17:30Z -->
 # 08. Current State Snapshot
 
-**Дата:** 2026-04-19 (prod-сверка через Odoo MCP)
+**Дата:** 2026-04-21 (последняя prod-сверка через Odoo MCP)
 **Цель:** фото системы в текущем состоянии, чтобы не путаться с планами и брифами.
 
 ---
@@ -10,9 +10,9 @@
 
 | Модель | Всего | Примечание |
 |---|---|---|
-| `product.template` | **1995** | 1983 в карантине, 10 мигрированы сегодня, 12 в новом каталоге + 6 service templates |
-| `product.product` (variants) | — | ~2000, в т.ч. 10 migrated variants |
-| `product.category` | **80+** | + 4 новых сегодня (287 Flores Cortadas root + 288/289/290 subcat) |
+| `product.template` | **1995** | 1983 в карантине, 10 мигрированы 2026-04-19, 12 в новом каталоге + 6 service templates + 2 eWallet (top-up + discount) |
+| `product.product` (variants) | — | ~2000, в т.ч. 10 migrated variants, 2 eWallet (7857 top-up, 7862 discount), 1 archived orphan (7860) |
+| `product.category` | **80+** | + 4 новых 2026-04-19 (287 Flores Cortadas root + 288/289/290 subcat) |
 | `purchase.order` | **188** | ~90% draft с amount_total=0 (импортированные albaran без цен) |
 | `purchase.order.line` | 1000+ | По строкам pedido |
 | `stock.move` с review-данными | **18** | IDs 461-478, большинство OK; выборка — в [03](03_odoo_receipt_review.md) |
@@ -22,9 +22,10 @@
 | `pos.config` | **3** | POS Plaza/Gloria/Blau — все на своих складах ✅ (config error починен 2026-04-19) |
 | `res.users` (internal) | **2** | Andriy (id=2 admin) + POS Terminal (id=5 kiosk) |
 | `hr.employee` | **3** | Andriy (1), Florista Test 1 (10), Florista Test 2 (11) |
-| `pos.session` | 1 open | POS Plaza/00003 открыта 2026-04-19 14:26 UTC |
+| `pos.session` | 0 open | Все закрыты после теста eWallet 2026-04-21 |
 | `base.automation` (активных) | **2** | Review info conclusion (id=1), Auto migrate on flag v2 (id=6) |
 | `ir.actions.server` custom | **4** | 1145 (Migrate UI trigger), 1146 (review_status), 1150 (calculate_in_shop), 1176 (Migrate execute v2.2) |
+| `loyalty.program` | **1** | id=2 "eWallet" (program_type=ewallet), все 3 POS, EUR (см. § E) |
 
 ---
 
@@ -69,14 +70,14 @@
 
 ⚠️ **Опечатка:** `pos.payment.method` id=5 = `Efectivo Blaus` (с лишней s). Journal `Efectivo Blau` правильный. Мелочь для cosmetic fix — см. [09](09_open_work.md).
 
+**eWallet как payment-like механизм:** не отдельная `pos.payment.method`, а **discount/reward** на cart screen (см. § E). При close session создаётся проводка через 438 Anticipos, а не через cash journal.
+
 **Employee rights (Odoo 19 `pos_hr`):**
 - **minimal** — только продажи, без cash in/out, без закрытия смены
 - **basic** — + cash in/out, + открытие смены
 - **advanced** — + create product, + закрытие смены с пересчётом наличных, + управление конфигом через POS UI
 
-Все 3 флориста (Andriy + 2 Test) в `advanced` на всех 3 POS → могут: открыть/закрыть смену, cash in/out (инкассация, личный вклад, «купил тряпки»), create product.
-
-**Session state 2026-04-19 14:26 UTC:** POS Plaza/00003 open (запустил Andriy).
+Все 3 флориста (Andriy + 2 Test) в `advanced` на всех 3 POS → могут: открыть/закрыть смену, cash in/out (инкассация, личный вклад, «купил тряпки»), create product. Гранулярность прав сверх 3 уровней — workstream P2 (см. [09](09_open_work.md)).
 
 **POS categories (`pos.category`):** не настроены. Все 3 config: `iface_available_categ_ids=[]`, `limit_categories=false`. Это блокер для UX кассира (кассир не может быстро фильтровать по группам Rosas/Ramas/Plantas/Servicios) — см. [09 P0](09_open_work.md).
 
@@ -109,7 +110,7 @@
 
 `hr.employee` **не занимает лицензию** — PIN-логин через `pos_hr` бесплатный. Каждая продажа прилипает к `pos.order.employee_id`, это фундамент будущей бонусной модели (см. [99 §33](99_invariants.md)).
 
-**Модули установлены сегодня (2026-04-19):**
+**Модули установлены 2026-04-19:**
 - `pos_hr` (pre-installed) — PIN-логин сотрудников в POS
 - `hr_attendance` — check-in/check-out через Kiosk Mode (future: базовая зарплатная часть)
 - `base_geolocalize` — dependency для hr_attendance (geo-tagging check-in)
@@ -118,6 +119,10 @@
 - Basic employee — только пробивает чеки, не может закрывать смену
 - Advanced employee — может Cash In/Out в середине смены (инкассация в банк, «купил тряпки за 20€»), закрывает смену с пересчётом наличных
 - Смена при передаче (день→ночь): старый advanced закрывает (пересчёт, подпись), новый открывает новую. Это правильный financial discipline — никто один не может уйти с деньгами.
+
+**⚠️ Workflow caveat (added 2026-04-21):** после Close Register Odoo автоматически открывает экран Opening Control следующей сессии. Если флорист случайно нажмёт Open Register или закроет вкладку — создаётся "полуоткрытая" pos.session в state `opening_control` без orders, которая блокирует правки на pos.config (нельзя менять journal/payment_method/warehouse). 
+
+**Правильная процедура:** Close Register → закрыть вкладку браузера ИЛИ навигировать прочь из POS UI (клик по логотипу Odoo), НЕ нажимать Open Register если не идёт смена сразу. Удалить такую сирота-сессию через UI нельзя (Delete заблокирован для pos.session всеми группами); fallback — direct write `state='closed'` + `stop_at` через MCP.
 
 ---
 
@@ -146,12 +151,84 @@
 
 | Статус | Количество | Комментарий |
 |---|---|---|
-| В карантине (`categ_id child_of 207`) | **1983** | Минус 10 ушли сегодня (6 deliveries + 4 flores) |
+| В карантине (`categ_id child_of 207`) | **1983** | Минус 10 ушли 2026-04-19 (6 deliveries + 4 flores) |
 | `x_studio_migration_status='migrated'` (target) | **10** | 6840→7828 и ещё 5 deliveries; ROSA/MARFULL/CRISANTEMO/EUCALIPTO |
 | `active=False` + `x_studio_migration_status='archived'` (source) | **10** | OLD_ префикс на SKU/barcode |
 | В новом каталоге (не карантин) | ~22 | 12 ранее + 10 мигрированных |
 
 **Post-migration TODOs:** bulk tax adjust, POS categories setup, POS tile visual test, Make.com bot OLD_ SKU awareness (см. [09](09_open_work.md), [02](02_makecom_bot.md)).
+
+---
+
+## E. eWallet & Loyalty setup (added 2026-04-21)
+
+**Status:** 🟢 PROD — end-to-end проверено через JE 19/20/21 в Odoo (top-up + redemption + close session). Используется как механизм **предоплаты за букет под заказ** ([01 §4.7](01_business_context.md), [05 §1.2.4](05_florists_logistics_accountant.md)).
+
+**Активные модули:**
+- `loyalty` — base модуль (loyalty.program / loyalty.card / loyalty.reward / loyalty.rule)
+- `pos_loyalty` — интеграция с Point of Sale
+- `sale_loyalty` — интеграция с Sale Orders (для будущего Sale flow)
+- `website_sale_loyalty` — eCommerce (когда будет сайт)
+- `pos_discount` — POS-side скидочный модуль
+
+**Программа:**
+
+| Поле | Значение |
+|---|---|
+| `loyalty.program` id | **2** |
+| name | `eWallet` |
+| `program_type` | `ewallet` |
+| `is_payment_program` | True |
+| currency | EUR |
+| `pos_config_ids` | `[]` (пусто = все 3 POS — баланс ходит между Plaza/Gloria/Blau) |
+| `available_on` | POS + Sales + Website |
+| `applies_on` | `future` (нельзя топнуть и сразу же потратить в том же чеке) |
+| `trigger` | `auto` (loyalty.card создаётся автоматически при продаже trigger product клиенту) |
+| `trigger_product_ids` | [7857] |
+| `reward_ids` | [2] (один reward `1€ per point discount`) |
+
+**Продукты:**
+
+| ID | Name | Роль | Income Account | Tax | available_in_pos | active |
+|---|---|---|---|---|---|---|
+| 7857 | Top-up eWallet | Пополнение (trigger product) | **438000 Anticipos** | 0% | True | True |
+| 7862 | eWallet | Discount/redemption (`discount_line_product_id` на reward 2) | **438000 Anticipos** | 0% | False | True |
+| 7860 | eWallet (orphan) | — | — | — | False | **False (archived 2026-04-21)** |
+
+**Critical fix 2026-04-21:** при автогенерации program Odoo создал discount product 7862 с `property_account_income_id = False`. Это означало бы при первой редемпции списание eWallet ушло бы в 700 Ventas (default из category), а не гасило 438. Зафиксировано через MCP write — теперь оба продукта пишут в 438. Инвариант [99 §44](99_invariants.md).
+
+**Бухгалтерская механика (verified 2026-04-21 на JE 19/20/21):**
+
+Пополнение через POS (Top-up eWallet продаётся клиенту, оплачивается кешем):
+```
+Dr 430100 Trade receivables (PoS) N €    ← промежуточный POS receivable
+Cr 438000 Anticipos de clientes  N €    ← liability (наш долг клиенту)
+```
+и параллельно cash-side:
+```
+Dr 570001 Efectivo               N €    ← касса +N
+Cr 430100 Trade receivables      N €    ← закрывает промежуточный
+```
+Нетто: `Dr 570 / Cr 438` — клиент пополнил.
+
+Редемпция (клиент покупает букет на M €, eWallet покрывает X € из M):
+```
+Dr 438000 Anticipos              X €    ← гашение пассива (списание eWallet)
+Cr 700000 Merchandise sold       (X − VAT)
+Cr 477000 IVA repercutido        VAT
+```
+Если M > X — остаток (M − X) идёт через обычный cash flow (Dr 570 / Cr 700+477).
+
+**Operational invariant:** в любой момент `sum(loyalty.card.points)` (по всем картам всех клиентов) **должен равняться** кредитовому балансу 438 Anticipos на тот же момент. Расхождение = bug.
+
+**Где смотреть баланс клиента:**
+- **Per-customer:** Contacts → клиент → smart button "Loyalty Cards" / "Coupons" → видно code, balance, history
+- **Per-program:** Sales → Products → Gift cards & eWallet → eWallet → smart button "eWallets" → список всех карт с балансами
+- **In POS:** при поиске клиента в "Choose Customer" видно строку `eWallet: N €` справа от имени
+
+**Как применить eWallet при продаже (POS UI):** клиент выбран → товары в корзине → кнопка ⋮ (три точки) рядом с Note → пункт Rewards/eWallet → строка-минус автоматически в корзине → Total пересчитывается. **Это reward-механика на cart screen, НЕ payment method на payment screen.**
+
+**Важное предупреждение для проды:** не активировать `available_in_pos=True` на top-up product **до** создания loyalty.program (см. [99 §45](99_invariants.md)) — иначе ghost liability на 438 без соответствующей карты.
 
 ---
 
@@ -194,7 +271,7 @@
 | `x_studio_migration_note` | — | ✅ | Текст-справка на target (append) |
 | `x_studio_variant_legacy_source` | — | ✅ | (product.product only) |
 | `x_studio_variant_migration_status` | — | ✅ | (product.product only) |
-| `x_studio_migrate_now` | — | ✅ (id 27133) | **NEW 2026-04-19** boolean flag-trigger для automation 6 |
+| `x_studio_migrate_now` | — | ✅ (id 27133) | boolean flag-trigger для automation 6 |
 
 **⚠️ Deprecated но не удалено (Studio protection):** `x_studio_many2many_field_4qh_1jkvk330u` (New Tags) — label переименован в `[DEPRECATED] New Tags`.
 
@@ -270,8 +347,9 @@
 
 1. **Make.com бот** — обрабатывает входящие документы в Telegram (активно)
 2. **Holded** — параллельно основная система (пока)
-3. **Odoo POS** — первая сессия прошла end-to-end (ROSA RED NAOMI + IVA 10% = 4€ через Efectivo Plaza, ticket 261-1-000002)
+3. **Odoo POS** — три кассы прошли first-sale + eWallet prepayment chain end-to-end (Tata 100€ deposit → 3€ redemption через Crisantemo Rami Mix)
 4. **Odoo catalog migration** — инфраструктура v2.2 работает, 10 карточек переехали
+5. **Odoo eWallet** — программа активна, готова принимать предоплаты под букеты на заказ
 
 С 20 апреля (MVP) — параллельный режим Holded + Odoo с постепенным переходом.
 
@@ -284,5 +362,5 @@
 - [05_florists_logistics_accountant.md](05_florists_logistics_accountant.md) — роли и их процессы
 - [06_catalog_migration_toolkit.md](06_catalog_migration_toolkit.md) — migration v2.2
 - [09_open_work.md](09_open_work.md) — TODO
-- [99_invariants.md](99_invariants.md) — правила, §38-43 новые из сессии 2026-04-19
+- [99_invariants.md](99_invariants.md) — правила, §38-43 + §44/45 (eWallet)
 - [CHANGELOG.md](CHANGELOG.md) — что менялось когда

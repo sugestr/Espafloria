@@ -1,4 +1,4 @@
-<!-- v: 14 | updated: 2026-04-19T23:45Z -->
+<!-- v: 15 | updated: 2026-04-21T17:30Z -->
 # VERSIONS
 
 Индекс версий всех `.md` в базе. **`v` в header этого файла — маркер синка всей базы** (см. [SYNC_STATE.md](SYNC_STATE.md)).
@@ -12,9 +12,9 @@
 | Файл | v | Updated (UTC) |
 |---|---|---|
 | `README.md` | 8 | 2026-04-19T22:15Z |
-| `VERSIONS.md` | 14 | 2026-04-19T23:45Z |
+| `VERSIONS.md` | 15 | 2026-04-21T17:30Z |
 | `SYNC_STATE.md` | 10 | 2026-04-19T22:15Z |
-| `CHANGELOG.md` | 14 | 2026-04-19T23:30Z |
+| `CHANGELOG.md` | 15 | 2026-04-21T17:30Z |
 | `00_master_index.md` | 11 | 2026-04-19T23:45Z |
 | `00_source_files_index.md` | 6 | 2026-04-19T12:30Z |
 | `01_business_context.md` | 3 | 2026-04-19T15:00Z |
@@ -24,12 +24,12 @@
 | `05_florists_logistics_accountant.md` | 3 | 2026-04-19T15:00Z |
 | `06_catalog_migration_toolkit.md` | 4 | 2026-04-19T23:45Z |
 | `07_infrastructure_devops.md` | 3 | 2026-04-19T15:00Z |
-| `08_current_state_snapshot.md` | 5 | 2026-04-19T23:30Z |
-| `09_open_work.md` | 5 | 2026-04-19T23:30Z |
+| `08_current_state_snapshot.md` | 6 | 2026-04-21T17:30Z |
+| `09_open_work.md` | 6 | 2026-04-21T17:30Z |
 | `10_vision_and_roadmap.md` | 4 | 2026-04-19T15:00Z |
 | `11_crm_and_customers.md` | 1 | 2026-04-18T16:35Z |
 | `12_ai_workflow.md` | 9 | 2026-04-19T22:15Z |
-| `99_invariants.md` | 4 | 2026-04-19T23:30Z |
+| `99_invariants.md` | 5 | 2026-04-21T17:30Z |
 
 ---
 

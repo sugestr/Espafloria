@@ -1,4 +1,4 @@
-<!-- v: 5 | updated: 2026-04-19T23:30Z -->
+<!-- v: 6 | updated: 2026-04-21T17:30Z -->
 # 09. Open Work — TODO
 
 Всё, что ещё **не сделано** или сделано частично. Приоритизировано.
@@ -16,11 +16,12 @@
 ### Odoo подготовка
 - [x] ✅ **Walk-through UI для флориста** — первая POS-сессия прошла end-to-end 2026-04-19 (ROSA RED NAOMI 4€ через Efectivo Plaza, ticket 261-1-000002). Планшет-режим работает.
 - [x] ✅ **Тестовая миграция 1 карточки** — мигрировано 10 карточек через v2.2 (6 deliveries + 4 flores). supplierinfo копируется корректно с дедупликацией. См. [06](06_catalog_migration_toolkit.md).
+- [x] ✅ **eWallet prepayment chain** (2026-04-21) — программа создана и end-to-end проверена через top-up Tata 100€ + redemption 3€ + close session. JE 19/20/21 verified. См. [08 §E](08_current_state_snapshot.md), [99 §44/45](99_invariants.md).
 - [ ] **Добавить `qty_received` + `qty_invoiced` в view `purchase.order.line`** (Studio, 2 минуты)
-- [x] ✅ **Config fix POS warehouses:** склады Plaza/Gloria/Blau (id=2/3/4) существовали. POS Gloria и Blau были привязаны к Plaza — починено 2026-04-19 (warehouse_id через direct RPC write, picking_type через UI). См. [08 §A/§B](08_current_state_snapshot.md).
+- [x] ✅ **Config fix POS warehouses:** склады Plaza/Gloria/Blau (id=2/3/4) существовали. POS Gloria и Blau были привязаны к Plaza — починено 2026-04-19. См. [08 §A/§B](08_current_state_snapshot.md).
 
-### Рабочее место флориста (новая P0-секция, приоритет для следующей сессии)
-- [ ] 🔴 **POS Categories setup** — на всех 3 configs `iface_available_categ_ids=[]`. Кассир не может быстро фильтровать Rosas / Ramas / Plantas / Servicios. Создать `pos.category` дерево (~5-8 категорий), bulk-set `pos_categ_ids` на 10 мигрированных карточках.
+### Рабочее место флориста (P0-секция, приоритет для следующей сессии)
+- [ ] 🔴 **POS Categories setup** — на всех 3 configs `iface_available_categ_ids=[]`. Кассир не может быстро фильтровать Rosas / Ramas / Plantas / Servicios. Создать `pos.category` дерево (~5-8 категорий), bulk-set `pos_categ_ids` на 10 мигрированных карточках + 2 eWallet (служебная категория, чтобы не попадались среди цветов).
 - [ ] **POS tile visual test** — открыть POS Plaza, убедиться что 10 мигрированных карточек корректно отображаются как tiles (цена, картинка, имя, VAT).
 - [ ] **End-to-end тест продажи с доставкой** — 3 розы + Entrega Barcelona Zona 1 → Validate → проверить Holded invoice через make.com бота.
 - [ ] **Bulk tax adjustment post-migration:** `categ_id child_of 287` (Flores Cortadas) → sale tax 82 / purchase tax 68 (10% G); услуги Deliveries → sale 5 / purchase 21% G (найти id). Одним bulk-update.
@@ -89,6 +90,59 @@
   - [ ] Kanban «закупили → … → продажа» взамен Google Sheets
 - [ ] **Аналитик workspace** — продавцы, рентабельность, потери
 
+### 🆕 POS rights granularity (запрошено owner 2026-04-21)
+
+Сейчас `pos_hr` даёт **только 3 уровня** (`minimal_employee_ids` / `basic_employee_ids` / `advanced_employee_ids`). Все наши флористы в `advanced` — это слишком разрешительно для рядового персонала.
+
+**Цель:** более тонкая гранулярность. Возможные оси:
+- Скидки (max %, требует ли подтверждения, manager PIN override порог)
+- Возврат / Refund (разрешён? на какую максимум сумму?)
+- Open/Close session
+- Cash In/Out (фиксированный лимит per shift?)
+- Создание product on-the-fly из POS
+- Доступ к чужим orders / истории чеков
+- Привилегия отменять order (не возврат, а cancel до payment)
+- Manager override через свой PIN (для approval action со стороны старшего)
+
+**Что есть из коробки:**
+- `hr.employee.pin` для approval-flow (manager confirms на чужом устройстве)
+- `pos.config.amount_authorized_diff` (разрешённое расхождение при close)
+- 3 tier'а `*_employee_ids` (built-in)
+- `manual_discount` boolean per-config
+- Group `point_of_sale.group_pos_user` vs `group_pos_manager` на уровне res.groups
+
+**Что нужно:**
+- [ ] Изучить Odoo 19 OCA модули `pos_*_security` если есть
+- [ ] Маппинг "роль флориста" → набор разрешений (junior / senior / manager)
+- [ ] Решить: Studio/configurator vs custom модуль
+- [ ] PIN manager-override на конкретные действия (не глобальный admin доступ)
+
+**Связь с инвариантами:** [99 §33](99_invariants.md) (бонусы личные → нужна точная attribution per employee), [99 §31](99_invariants.md) (списания через approval только manager).
+
+### 🆕 Букеты как сущность (workstream — отдельная сессия)
+
+Это большая тема, требует дизайн-сессии перед реализацией. Контекст: [05 §1.2](05_florists_logistics_accountant.md), [99 §32](99_invariants.md).
+
+**Главные вопросы:**
+- [ ] Где живёт «букет»? Кандидаты: MRP BoM / custom model `espafloria.bouquet` / Combo product (Odoo 17+)
+- [ ] Жизненный цикл (созвонимся с пользователем): Created → [modifications] → Disassembled OR Sold
+- [ ] Уникальный номер букета (sequence)
+- [ ] Фото при создании (обязательно, не опционально)
+- [ ] Две цены: shop vs online (через pricelist rules или поля на букете?)
+- [ ] Печать ценника (термопринтер, brand layout)
+- [ ] Скидка применяется на уровне букета, не на компонентах (инвариант 32)
+- [ ] **Make-on-sale** (флорист собирает на месте у клиента) vs **Pre-built** (на витрину утром, продаётся днём) — оба flow в одном lifecycle
+- [ ] Модификация (добавить розу, удалить завядшую) — это update сущности, не новая
+- [ ] Disassembly — компоненты возвращаются на склад
+- [ ] Связь с eWallet: предоплата за «букет на пятницу» → loyalty.card → к моменту pickup букет готов с этим номером
+- [ ] POS UX: как флорист собирает букет в POS без line discount (одной кнопкой?)
+
+**Решить ДО начала разработки:**
+- [ ] Должен ли букет быть `product.template`/`product.product` (sale-able first-class), или отдельной моделью с привязкой к sale.order.line через relate?
+- [ ] Как считается себестоимость (rolling avg компонентов на момент создания, или fix at create time)?
+- [ ] Что в чеке у клиента: «Ramo personalizado #B-2026-0001» (одна строка) или развёрнутый список компонентов?
+- [ ] Как видит букет бухгалтер (агрегированная sale + COGS, или построчная)?
+
 ### 🆕 Авторизация и смены (блокер бонусной модели)
 - [ ] Модель смены (`hr.attendance` или custom) с PIN-кодом
 - [ ] PIN-авторизация в POS — продажа привязывается к `hr.employee`
@@ -118,16 +172,8 @@
 - [ ] Rolling inventory для ваз/декора: задание пересчёта при первой продаже (см. [99 §25](99_invariants.md))
 - [ ] Контроль выполнения: статус + напоминания при задержке
 
-### 🆕 Букет как отдельная сущность
-- [ ] Create / Modify / Disassemble workflow
-- [ ] Уникальный номер букета
-- [ ] Фото при создании (обязательно)
-- [ ] Две цены: витрина vs online
-- [ ] Печать ценника
-- [ ] Решить: внутри POS / отдельный экран / производственная операция
-
 ### POS
-- [ ] Быстрая сборка букета на месте без line discount
+- [ ] Быстрая сборка букета на месте без line discount (см. workstream «Букеты как сущность» выше)
 - [ ] Фото готового букета → sale.order.line
 
 ### Ценники
@@ -149,11 +195,12 @@
 ## P3 — Новые workstreams (каждый требует отдельной сессии)
 
 ### P3.1 CRM и клиенты (см. [11_crm_and_customers.md](11_crm_and_customers.md))
-- [ ] MVP: базовая клиентская карточка создаётся при продаже (телефон)
+- [x] ✅ **MVP базовая клиентская карточка через POS** — работает (тестирована на Tata, Vasilij, Pedro 2026-04-21)
+- [x] ✅ **eWallet baseline для loyalty** — программа eWallet активна, можно использовать как фундамент future loyalty (см. [08 §E](08_current_state_snapshot.md))
 - [ ] История покупок через `partner_id` (штатно)
 - [ ] Этап 2: сегментация (VIP / Regular / Dormant / New)
 - [ ] Первые email-рассылки через `mass.mailing`
-- [ ] Loyalty program (штатный `loyalty.program`)
+- [ ] **Loyalty Cards program** (помимо eWallet — отдельная программа `loyalty` type для баллов за покупки)
 - [ ] WhatsApp интеграция (Wati / 360dialog / custom — решить)
 - [ ] Напоминания о значимых датах клиентов (ДР, годовщины)
 - [ ] GDPR compliance (opt-in, right to deletion)
@@ -273,6 +320,7 @@ draft → confirmed → received → unpacked → priced → labeled → on_sale
 
 - `x_studio_many2many_field_4qh_1jkvk330u` («New Tags») — label переименован, но Studio не даёт удалить физически. Можно попробовать через Studio UI вручную.
 - `x_studio_legacy_source` на `product.template` — поле существует, но action 1145 фактически не заполняет его на source-записи (см. [06](06_catalog_migration_toolkit.md) как канон). Для Variant-side информация хранится в `x_studio_variant_legacy_source`. Можно либо скрыть source-side поле из Studio view, либо начать его использовать — решение открыто.
+- **pos.order id=2-8 (тестовые от 2026-04-21):** state=done без связанных pos.payment и account.move (после reset тестовых данных). ORM не даёт удалить state=done через API. На production не влияют. Удалить если потребуется — через SQL DELETE на бэкенде Odoo.sh.
 
 ---
 
@@ -290,7 +338,7 @@ draft → confirmed → received → unpacked → priced → labeled → on_sale
 | Период | Цель |
 |---|---|
 | **До 20 апреля** | MVP запуск, walk-through UI, P0 items |
-| **21 апреля — 4 мая** | Массовый импорт albaran (сотрудник), мелкие фиксы |
+| **21 апреля — 4 мая** | Массовый импорт albaran (сотрудник), мелкие фиксы, POS rights granularity, букеты-как-сущность дизайн-сессия |
 | **Май** | Импорт продаж, формирование нового каталога, начало миграции |
 | **Июнь-июль** | UX рабочих мест, ролевые views, POS правила |
 | **Август-октябрь** | Marketplace integrations (Flowwow, Glovo) |

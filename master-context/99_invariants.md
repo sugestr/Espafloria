@@ -1,4 +1,4 @@
-<!-- v: 4 | updated: 2026-04-19T23:30Z -->
+<!-- v: 5 | updated: 2026-04-21T17:30Z -->
 # 99. Invariants — железные правила проекта
 
 **Читать перед любыми изменениями в системе.** Нарушение этих правил создаёт техдолг, ломает бот или теряет данные.
@@ -281,6 +281,41 @@ Migration v2.2 автоматически соблюдает это правил
 
 ---
 
+## 💳 eWallet / Gift Card / vouchers (добавлено 2026-04-21)
+
+### 44. eWallet/Gift Card top-up product = Income Account 438 + tax 0% (multipurpose voucher)
+
+При настройке eWallet или Gift Card программы в Odoo:
+- **Top-up product** (тот, что продаётся в POS для пополнения кошелька): `property_account_income_id` = `438 Anticipos de clientes` (PGCE 438xxx, account_type `liability_current`), `taxes_id = []` (0% / нет налога).
+- **Discount product** (`loyalty.reward.discount_line_product_id`, появляется как строка-минус при редемпции): тот же `property_account_income_id = 438`, `taxes_id = []`.
+
+**Почему так:**
+- EU Directive 2016/1065 (multipurpose voucher): VAT не начисляется при выдаче ваучера, который покрывает товары с разными ставками НДС (цветы 10%, декор 21%, доставка 21%). VAT садится при редемпции на конкретный товар.
+- 438 — пассив "мы должны клиенту товар/услугу на эту сумму", не выручка. До редемпции — это деньги клиента у нас на хранении, не наш доход.
+
+**Если оставить Income Account пустым** или поставить 700 Ventas — Odoo при пополнении создаст фантомную выручку, которая задвоится при редемпции (выручка ещё раз сядет на конкретный товар). Бухгалтерия станет нечитаемой.
+
+**Проверка инварианта:** в любой момент `sum(loyalty.card.points)` должна равняться кредитовому балансу 438 Anticipos на ту же дату. Расхождение = bug в настройке Income Account.
+
+Reference: [Odoo Help — Configure accounts for Gift Card and eWallet](https://www.odoo.com/forum/help-1/how-to-configure-accounts-for-gift-card-and-ewallet-257141).
+
+### 45. Top-up product активируется в POS ТОЛЬКО ПОСЛЕ создания loyalty.program
+
+**Хронология запрещена:** создать `Top-up eWallet` product с `available_in_pos=True` → продать его в POS клиенту → ПОТОМ создать `loyalty.program type=ewallet`.
+
+**Что произойдёт:** продажа top-up создаст бухгалтерскую проводку `Cr 438 Anticipos N €`, но `loyalty.card` НЕ создастся (программы ещё нет). Получится **ghost liability**: General Ledger 438 говорит «мы должны клиенту N €», но в `loyalty.card` баланса нет — клиент не сможет потратить. Бухгалтерия и operational layer рассинхронизированы.
+
+**Правильная хронология:**
+1. Создать top-up product с `available_in_pos=False` (или категория без POS)
+2. Создать `loyalty.program` (type eWallet или Gift Card), привязать к ней top-up product через `trigger_product_ids`
+3. Создать `discount_line_product_id` или подтвердить что Odoo создал автоматически, выставить ему Income Account 438 (см. §44)
+4. Только теперь — `available_in_pos=True` на top-up product
+5. Reload POS session (frontend кеширует config)
+
+Случай 2026-04-21: до создания программы продано 230 € top-up'ов клиентам Vasilij и Pedro → 438 показал 230 € liability без соответствующих карт. Очищено через массовое удаление test-данных. В проде такого не должно быть никогда — раз настроили правильно, инвариант держится автоматически.
+
+---
+
 ## Краткая мнемоника
 
 > **Paper ≠ Truth. Receipt = Truth. Logist = hint. -1 ≠ 0. Odoo = mirror, not dictator.**
@@ -290,6 +325,7 @@ Migration v2.2 автоматически соблюдает это правил
 > **History stays. Migration copies supplierinfo. Target != quarantine.**
 > **Marketplace = intermediary. Client is ours. Commission ≠ discount.**
 > **Skeleton → list_price=0. POS tile reads template image if flat. Scripts source-of-truth in repo, Odoo mirror.**
+> **eWallet/voucher = 438 + tax 0%. sum(cards) == Cr(438). Program before product-in-POS.**
 
 ---
 
