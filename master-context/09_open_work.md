@@ -1,4 +1,4 @@
-<!-- v: 7 | updated: 2026-04-23T01:30Z -->
+<!-- v: 8 | updated: 2026-04-23T01:40Z -->
 # 09. Open Work — TODO
 
 Всё, что ещё **не сделано** или сделано частично. Приоритизировано.
@@ -125,14 +125,14 @@
 
 **Главные вопросы:**
 - [x] Где живёт «букет»? — Решено MVP: `sale.order` с partner=Anon id=53, именем `BP-YYYY-NNNN`. Не MRP BoM, не custom model — просто SO с привязкой строк через `sale_order_origin_id` (Settle).
-- [x] Жизненный цикл: Created → [modifications] → Disassembled OR Sold — Created + Disassembled + Sold реализованы 2026-04-18/23 через POS. **Modifications** ещё нет.
+- [x] Жизненный цикл: Created → [modifications] → Disassembled OR Sold — Created + Modified (reassemble) + Disassembled + Sold все реализованы 2026-04-18/23 через POS. Списание завядшей розы как отдельного событие (не через reassemble) — ещё нет, связано с writeoff-workstream.
 - [x] Уникальный номер букета (sequence) — `BP-YYYY-NNNN` через `ir.sequence` per-warehouse (espafloria.bouquet.plaza/.gloria/.blau).
 - [ ] Фото при создании (обязательно, не опционально)
 - [ ] Две цены: shop vs online (через pricelist rules или поля на букете?)
 - [ ] Печать ценника (термопринтер, brand layout)
 - [ ] Скидка применяется на уровне букета, не на компонентах (инвариант 32)
 - [x] **Make-on-sale** (флорист собирает на месте у клиента) — реализовано через payment method «Собрать букет». **Pre-built** (на витрину утром, продаётся днём) — ещё нет.
-- [ ] Модификация (добавить розу, удалить завядшую) — это update сущности, не новая
+- [x] Модификация (добавить розу, удалить строку, изменить цену) — реализовано через reassemble-ветку action 1203: Settle + правка в корзине + «Собрать букет» без маркера → старый SO cancel + новый SO с обновлёнными линиями. См. [05 §1.2.2](05_florists_logistics_accountant.md). *«Удалить как завядшую»* (writeoff с фото) — отдельный workstream.
 - [x] Disassembly — компоненты возвращаются на склад (через Settle + marker product 7865 + 3 слоя автоматик, см. [99 §46](99_invariants.md))
 - [ ] Связь с eWallet: предоплата за «букет на пятницу» → loyalty.card → к моменту pickup букет готов с этим номером
 - [x] POS UX: как флорист собирает букет в POS без line discount (одной кнопкой?) — payment method «Собрать букет» = одно касание.
@@ -173,7 +173,7 @@
 - [ ] Контроль выполнения: статус + напоминания при задержке
 
 ### POS
-- [x] Быстрая сборка букета на месте без line discount (2026-04-18, через payment method «Собрать букет»). Расширено dismantle'ем 2026-04-23 — см. workstream «Букеты как сущность» выше для оставшихся задач.
+- [x] Быстрая сборка букета на месте без line discount (2026-04-18, через payment method «Собрать букет»). Расширено 2026-04-23: dismantle + modify (reassemble). См. workstream «Букеты как сущность» выше для оставшихся задач.
 - [ ] Фото готового букета → sale.order.line
 
 ### Ценники
