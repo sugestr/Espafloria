@@ -1,4 +1,4 @@
-<!-- v: 3 | updated: 2026-04-19T15:00Z -->
+<!-- v: 4 | updated: 2026-04-23T01:20Z -->
 # 05. Роли и рабочие процессы
 
 Статус: 🔴 **CONCEPT / PARTIAL** — функциональные spec-и описаны, реализация UX частично.
@@ -87,8 +87,26 @@
 
 #### 1.2.3. Разборка букета
 
-- Полноценная разборка → компоненты **возвращаются на склад**
-- **Открытый вопрос:** возврат компонентов вручную или автоматически по составу
+**Реализовано через POS Settle + маркер (payment method «Собрать букет», id=6).**
+
+Флорист-флоу:
+1. В POS нажимает **Orders → Register** → выбирает букет `BP-*` из списка → Settle. В корзину автоматически падают все линии компонентов с `sale_order_origin_id` → старый SO.
+2. Добавляет товар **`🗑 Разборка букета`** (product id=`7865`, категория `[BQ-DISMANTLE]`, service, price=0) — маркер.
+3. Payment → метод **«Собрать букет»** → Validate. Платёж нулевой по сути (Settle уже списал баланс старого SO).
+
+Серверная логика (все idempotent, срабатывают при оплате):
+
+| Автоматика | Модель | Триггер | Действие |
+|---|---|---|---|
+| `base.automation 10` → `ir.actions.server 1203` | `pos.payment` | `on_create_or_write`, `payment_method_id=6` | Если в линиях есть маркер 7865 + хотя бы одна линия с `sale_order_origin_id` указывает на SO с `partner_id=53` (Anon) — ветка `is_dismantle`: старый SO → `cancel`, его SO-picking → `cancel`, оригинальный POS-picking → reverse (return picking done). НЕ создаёт новый SO. Если маркер есть, но tech-bouquet-SO не найдена — `raise UserError` с подсказкой «нажми Register → Orders, выбери BP-* и добавь маркер». |
+| `base.automation 11` → `ir.actions.server 1205` | `stock.picking` | `on_create_or_write` | Когда у нового POS-picking'а финально проставлен `origin = pos.order.name` и `state=done` (POS проставляет origin последним, после validate) — если POS содержит маркер 7865, picking реверсится через `stock.return.picking` (idempotent по `return_id`). Для `state ∈ {draft, assigned}` — пытается `.write({'state': 'cancel'})`. |
+| `base.automation 12` → `ir.actions.server 1207` | `pos.order` | `on_create_or_write`, `state=paid` | Safety net. Перебирает `picking_ids`; если есть `done` без `return_id` — реверсит. Срабатывает многократно (каждый write на pos.order), но idempotent. |
+
+Нетто-эффект по складу = 0: оригинальный ship компонентов и новый ship от dismantle-POS оба reversed.
+
+**Требует от флориста:** корректно сделать Settle (не просто ручной выбор компонентов) — иначе в `pos.order.line.sale_order_origin_id` будет `False`, и слой 1 выдаст UserError.
+
+Marker-product создан через `product.template` id=7865, SKU `BQ-DISMANTLE`, `detailed_type=service`, `pos_categ_ids` содержит кнопку «Разборка». См. инвариант [99 §46](99_invariants.md).
 
 #### 1.2.4. Две формы одного жизненного цикла
 

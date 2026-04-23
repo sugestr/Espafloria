@@ -1,4 +1,4 @@
-<!-- v: 6 | updated: 2026-04-21T17:30Z -->
+<!-- v: 7 | updated: 2026-04-23T01:30Z -->
 # 09. Open Work — TODO
 
 Всё, что ещё **не сделано** или сделано частично. Приоритизировано.
@@ -121,21 +121,21 @@
 
 ### 🆕 Букеты как сущность (workstream — отдельная сессия)
 
-Это большая тема, требует дизайн-сессии перед реализацией. Контекст: [05 §1.2](05_florists_logistics_accountant.md), [99 §32](99_invariants.md).
+Это большая тема, требует дизайн-сессии перед реализацией. Контекст: [05 §1.2](05_florists_logistics_accountant.md), [99 §32, §46](99_invariants.md).
 
 **Главные вопросы:**
-- [ ] Где живёт «букет»? Кандидаты: MRP BoM / custom model `espafloria.bouquet` / Combo product (Odoo 17+)
-- [ ] Жизненный цикл (созвонимся с пользователем): Created → [modifications] → Disassembled OR Sold
-- [ ] Уникальный номер букета (sequence)
+- [x] Где живёт «букет»? — Решено MVP: `sale.order` с partner=Anon id=53, именем `BP-YYYY-NNNN`. Не MRP BoM, не custom model — просто SO с привязкой строк через `sale_order_origin_id` (Settle).
+- [x] Жизненный цикл: Created → [modifications] → Disassembled OR Sold — Created + Disassembled + Sold реализованы 2026-04-18/23 через POS. **Modifications** ещё нет.
+- [x] Уникальный номер букета (sequence) — `BP-YYYY-NNNN` через `ir.sequence` per-warehouse (espafloria.bouquet.plaza/.gloria/.blau).
 - [ ] Фото при создании (обязательно, не опционально)
 - [ ] Две цены: shop vs online (через pricelist rules или поля на букете?)
 - [ ] Печать ценника (термопринтер, brand layout)
 - [ ] Скидка применяется на уровне букета, не на компонентах (инвариант 32)
-- [ ] **Make-on-sale** (флорист собирает на месте у клиента) vs **Pre-built** (на витрину утром, продаётся днём) — оба flow в одном lifecycle
+- [x] **Make-on-sale** (флорист собирает на месте у клиента) — реализовано через payment method «Собрать букет». **Pre-built** (на витрину утром, продаётся днём) — ещё нет.
 - [ ] Модификация (добавить розу, удалить завядшую) — это update сущности, не новая
-- [ ] Disassembly — компоненты возвращаются на склад
+- [x] Disassembly — компоненты возвращаются на склад (через Settle + marker product 7865 + 3 слоя автоматик, см. [99 §46](99_invariants.md))
 - [ ] Связь с eWallet: предоплата за «букет на пятницу» → loyalty.card → к моменту pickup букет готов с этим номером
-- [ ] POS UX: как флорист собирает букет в POS без line discount (одной кнопкой?)
+- [x] POS UX: как флорист собирает букет в POS без line discount (одной кнопкой?) — payment method «Собрать букет» = одно касание.
 
 **Решить ДО начала разработки:**
 - [ ] Должен ли букет быть `product.template`/`product.product` (sale-able first-class), или отдельной моделью с привязкой к sale.order.line через relate?
@@ -173,7 +173,7 @@
 - [ ] Контроль выполнения: статус + напоминания при задержке
 
 ### POS
-- [ ] Быстрая сборка букета на месте без line discount (см. workstream «Букеты как сущность» выше)
+- [x] Быстрая сборка букета на месте без line discount (2026-04-18, через payment method «Собрать букет»). Расширено dismantle'ем 2026-04-23 — см. workstream «Букеты как сущность» выше для оставшихся задач.
 - [ ] Фото готового букета → sale.order.line
 
 ### Ценники

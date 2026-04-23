@@ -1,7 +1,7 @@
-<!-- v: 6 | updated: 2026-04-21T17:30Z -->
+<!-- v: 7 | updated: 2026-04-23T01:30Z -->
 # 08. Current State Snapshot
 
-**Дата:** 2026-04-21 (последняя prod-сверка через Odoo MCP)
+**Дата:** 2026-04-23 (prod-сверка через Odoo MCP; обновлено после bouquet dismantle end-to-end; до этого — eWallet 2026-04-21)
 **Цель:** фото системы в текущем состоянии, чтобы не путаться с планами и брифами.
 
 ---
@@ -22,9 +22,9 @@
 | `pos.config` | **3** | POS Plaza/Gloria/Blau — все на своих складах ✅ (config error починен 2026-04-19) |
 | `res.users` (internal) | **2** | Andriy (id=2 admin) + POS Terminal (id=5 kiosk) |
 | `hr.employee` | **3** | Andriy (1), Florista Test 1 (10), Florista Test 2 (11) |
-| `pos.session` | 0 open | Все закрыты после теста eWallet 2026-04-21 |
-| `base.automation` (активных) | **2** | Review info conclusion (id=1), Auto migrate on flag v2 (id=6) |
-| `ir.actions.server` custom | **4** | 1145 (Migrate UI trigger), 1146 (review_status), 1150 (calculate_in_shop), 1176 (Migrate execute v2.2) |
+| `pos.session` | varies | 2026-04-21 закрыты после eWallet-теста; 2026-04-23 открывались для dismantle-теста (POS Plaza) |
+| `base.automation` (активных) | **5** | Review info conclusion (1), Auto migrate on flag v2 (6), Bouquet POS→SO on payment (10), Bouquet dismantle cancel POS picking (11), Bouquet dismantle safety net on pos.order paid (12) |
+| `ir.actions.server` custom | **7** | 1145 (Migrate UI trigger), 1146 (review_status), 1150 (calculate_in_shop), 1176 (Migrate execute v2.2), 1203 (Bouquet payment handler), 1205 (Bouquet on stock.picking), 1207 (Bouquet on pos.order paid) |
 | `loyalty.program` | **1** | id=2 "eWallet" (program_type=ewallet), все 3 POS, EUR (см. § E) |
 
 ---
@@ -65,6 +65,7 @@
 | 5 | **Efectivo Blaus** | cash | Efectivo Blau (22, EFBL) | [3] |
 | 2 | Tarjeta | bank | Bank (15) | [1, 2, 3] |
 | 3 | Cuenta de cliente | pay_later | — | [1, 2, 3] |
+| 6 | Собрать букет | bank (technical) | Bouquet Internal (24) | [1, 2, 3] |
 
 Каждая касса cash-метод уникальный per-POS (Odoo constraint), одинаковый GL account `570001 Efectivo`, различаются по journal code для per-POS tracking бухгалтером. Tarjeta (bank) и Cuenta de cliente (pay_later) — shared between 3 configs.
 

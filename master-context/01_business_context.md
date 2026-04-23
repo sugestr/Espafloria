@@ -1,4 +1,4 @@
-<!-- v: 3 | updated: 2026-04-19T15:00Z -->
+<!-- v: 4 | updated: 2026-04-23T01:20Z -->
 # 01. Бизнес-контекст
 
 ## Компания
@@ -147,7 +147,7 @@ effective_unit_cost = paper_total_amount / actual_received_units
 3. Может округлить цену
 4. Добавляет доставку, закрывает чек
 **Требование:** не заставлять делать line discount по каждой строке.
-> 🔴 **CONCEPT** — POS-букеты не настроены.
+> 🟢 **IMPLEMENTED 2026-04-23** — Made-on-sale сборка и разборка через POS payment method «Собрать букет» (id=6). SO `BP-YYYY-NNNN`, tech partner Anon id=53, маркер разборки product id=7865. См. [05 §1.2.3](05_florists_logistics_accountant.md) и [99 §46](99_invariants.md).
 
 ### 4.8. Витрина vs online — разные цены
 **Пример:** витрина 37 €, online 45 €.

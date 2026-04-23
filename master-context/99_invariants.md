@@ -1,4 +1,4 @@
-<!-- v: 5 | updated: 2026-04-21T17:30Z -->
+<!-- v: 6 | updated: 2026-04-23T01:30Z -->
 # 99. Invariants — железные правила проекта
 
 **Читать перед любыми изменениями в системе.** Нарушение этих правил создаёт техдолг, ломает бот или теряет данные.
@@ -316,6 +316,22 @@ Reference: [Odoo Help — Configure accounts for Gift Card and eWallet](https://
 
 ---
 
+## 🌸 POS-букеты (добавлено 2026-04-23)
+
+### 46. Разборка букета требует Settle-линка, не ручной сбор компонентов
+
+Маркер-товар `🗑 Разборка букета` (`product.product` id=`7865`, SKU `BQ-DISMANTLE`) в корзине POS + оплата методом «Собрать букет» (id=`6`) запускают dismantle-ветку action 1203. Но ветка активна только если **хотя бы одна** `pos.order.line.sale_order_origin_id` указывает на `sale.order` с `partner_id=53` (Anon) — т.е. букет подтянут через **Settle из списка букетов**, а не набран вручную по компонентам.
+
+**Почему:** ручной набор не даёт связи со старым SO → откат стока и закрытие старого букета становятся невозможны. Без Settle-линка action 1203 выбрасывает `UserError` с подсказкой «нажми Register → Orders, выбери BP-*» — это защита, не баг.
+
+**Stock-leak prevention:** из-за timing race в Odoo 19 (POS проставляет `stock.picking.origin` **после** `button_validate()`) автоматики на `stock.picking` должны **реверсить done-picking через `stock.return.picking`**, а не пытаться `.write({'state': 'cancel'})` — write state не откатывает уже совершённые stock.move. Три слоя (actions 1203/1205/1207) все idempotent через проверку `return_id` у существующего return picking.
+
+**Где не нарушать:** `TECH_PARTNER_ID=53`, `BOUQUET_METHOD_ID=6`, `DISMANTLE_MARKER_PRODUCT_ID=7865` зашиты как константы в actions 1203/1205/1207. При переименовании/замене любой из этих сущностей — менять во всех трёх (и в snapshot `.py` в репо).
+
+См. [05 §1.2.3](05_florists_logistics_accountant.md), snapshot-артефакты `bouquet_on_*_action.py`.
+
+---
+
 ## Краткая мнемоника
 
 > **Paper ≠ Truth. Receipt = Truth. Logist = hint. -1 ≠ 0. Odoo = mirror, not dictator.**
@@ -326,6 +342,7 @@ Reference: [Odoo Help — Configure accounts for Gift Card and eWallet](https://
 > **Marketplace = intermediary. Client is ours. Commission ≠ discount.**
 > **Skeleton → list_price=0. POS tile reads template image if flat. Scripts source-of-truth in repo, Odoo mirror.**
 > **eWallet/voucher = 438 + tax 0%. sum(cards) == Cr(438). Program before product-in-POS.**
+> **Bouquet dismantle = Settle + marker. POS sets picking.origin LAST — reverse done, don't write cancel.**
 
 ---
 
