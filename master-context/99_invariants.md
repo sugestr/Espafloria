@@ -1,4 +1,4 @@
-<!-- v: 6 | updated: 2026-04-23T01:30Z -->
+<!-- v: 7 | updated: 2026-04-23T13:40Z -->
 # 99. Invariants — железные правила проекта
 
 **Читать перед любыми изменениями в системе.** Нарушение этих правил создаёт техдолг, ломает бот или теряет данные.
@@ -316,19 +316,41 @@ Reference: [Odoo Help — Configure accounts for Gift Card and eWallet](https://
 
 ---
 
-## 🌸 POS-букеты (добавлено 2026-04-23)
+## 🌸 POS-букеты (v2 reserve-model — refactored 2026-04-23)
 
-### 46. Разборка букета требует Settle-линка, не ручной сбор компонентов
+### 46. Букет = незаконченная продажа, зарезервировавшая товар на складе
 
-Маркер-товар `🗑 Разборка букета` (`product.product` id=`7865`, SKU `BQ-DISMANTLE`) в корзине POS + оплата методом «Собрать букет» (id=`6`) запускают dismantle-ветку action 1203. Но ветка активна только если **хотя бы одна** `pos.order.line.sale_order_origin_id` указывает на `sale.order` с `partner_id=53` (Anon) — т.е. букет подтянут через **Settle из списка букетов**, а не набран вручную по компонентам.
+**Модель:** букет на витрине — это `sale.order` с `partner_id=53` (Anon), `state=sale`, у которого `SO-picking.state=assigned` (reserve держит компоненты). **Не** `done` (не ушли клиенту) и **не** `cancel` (не отменён). Физически компоненты лежат в магазине, но системно зарезервированы — другая продажа их не заберёт.
 
-**Почему:** ручной набор не даёт связи со старым SO → откат стока и закрытие старого букета становятся невозможны. Без Settle-линка action 1203 выбрасывает `UserError` с подсказкой «нажми Register → Orders, выбери BP-*» — это защита, не баг.
+**Четыре жизненных перехода**, все идут через один код в `ir.actions.server id=1203` + `id=1209`:
 
-**Stock-leak prevention:** из-за timing race в Odoo 19 (POS проставляет `stock.picking.origin` **после** `button_validate()`) автоматики на `stock.picking` должны **реверсить done-picking через `stock.return.picking`**, а не пытаться `.write({'state': 'cancel'})` — write state не откатывает уже совершённые stock.move. Три слоя (actions 1203/1205/1207) все idempotent через проверку `return_id` у существующего return picking.
+| # | Триггер | Ветка action | Что делает |
+|---|---|---|---|
+| **Create** | `pos.payment` method=6 + нет Settle-линка | 1203 branch create | Создаёт SO BP-* на Anon, `action_confirm()` → SO-picking assigned, reverse POS-picking (стоки возвращаются, reserve держит) |
+| **Reassemble** | `pos.payment` method=6 + есть Settle-линка на Anon SO | 1203 branch reassemble | `old.action_cancel()` → new SO BP-* с текущим составом, confirm, SO-picking assigned, reverse POS-picking |
+| **Sell** | `pos.payment` method ≠ 6 (Cash/Card/etc) + есть Settle-линка | 1203 branch sell | **Только chatter**. Odoo 19 штатно cancels SO-picking, POS-picking списывает, qty_delivered обновляется. Нам остаётся только логировать |
+| **Dismantle** | `pos.payment` method=8 | 1209 | `old.action_cancel()`, reverse POS-picking (стоки на склад) |
 
-**Где не нарушать:** `TECH_PARTNER_ID=53`, `BOUQUET_METHOD_ID=6`, `DISMANTLE_MARKER_PRODUCT_ID=7865` зашиты как константы в actions 1203/1205/1207. При переименовании/замене любой из этих сущностей — менять во всех трёх (и в snapshot `.py` в репо).
+**Почему Sell ничего не делает с SO:** подтверждено тестом 1.1 (23 апр 2026) — Odoo 19 при Settle+cash автоматически cancels `SO-picking`, POS-picking создаёт свой move, `sale.order.line.qty_delivered` обновляется через POS payment hook. **Единственное условие: SO-picking на момент Settle должен быть в state=assigned, не cancel.** Наша старая v1 архитектура ломала это правило (cancel SO-picking при create), v2 исправляет.
 
-См. [05 §1.2.3](05_florists_logistics_accountant.md), snapshot-артефакты `bouquet_on_*_action.py`.
+**Ключевое правило refactor'а:** после `so.action_confirm()` в branch create/reassemble — **НЕ cancel SO-picking**. Он должен держать reserve, чтобы при будущем Settle штатная защита Odoo сработала.
+
+**Автоматически вставляемый маркер:** если POS-линии не содержат `[BOUQUET-ASSEMBLY]` (id=7864, `🌹 Работа по сборке букета`) — action 1203 branch create/reassemble добавляет его в new SO с `qty=1, price=0`. Бизнес-логика: флорист сам добавил с 5€ → бонус ему; скрипт добавил c 0€ → нет бонуса, но маркер для аналитики есть.
+
+**Где не нарушать константы:**
+- `TECH_PARTNER_ID = 53` — Anon res.partner
+- `BOUQUET_ASSEMBLE_METHOD_ID = 6` — «🌹 Собрать / изменить букет»
+- `BOUQUET_DISMANTLE_METHOD_ID = 8` — «🗑 Разобрать букет»
+- `ASSEMBLY_MARKER_PRODUCT_ID = 7864` — «🌹 Работа по сборке букета»
+
+При переименовании/замене любого — менять в обоих actions (1203 и 1209) и в snapshot `.py` файлах.
+
+**Что ушло в историю (v1 deprecated):**
+- Product id=7865 `[BQ-DISMANTLE]` → archived (больше не нужен, разборка через method=8).
+- `ir.actions.server` 1205 (stock.picking layer) и 1207 (pos.order safety net) → automations 11/12 disabled, actions остались в базе на случай отката.
+- `cancel SO-picking` после `action_confirm()` → **убрано**, ломало reserve-model.
+
+См. [05 §1.2](05_florists_logistics_accountant.md), snapshot-артефакты `bouquet_on_payment_action.py` (action 1203), `bouquet_on_dismantle_action.py` (action 1209).
 
 ---
 
@@ -342,7 +364,7 @@ Reference: [Odoo Help — Configure accounts for Gift Card and eWallet](https://
 > **Marketplace = intermediary. Client is ours. Commission ≠ discount.**
 > **Skeleton → list_price=0. POS tile reads template image if flat. Scripts source-of-truth in repo, Odoo mirror.**
 > **eWallet/voucher = 438 + tax 0%. sum(cards) == Cr(438). Program before product-in-POS.**
-> **Bouquet dismantle = Settle + marker. POS sets picking.origin LAST — reverse done, don't write cancel.**
+> **Bouquet = reserve (SO-picking assigned). Sell штатно Odoo. Assemble = method 6, Dismantle = method 8. Marker 7864 обязателен — авто-вставка если забыт.**
 
 ---
 

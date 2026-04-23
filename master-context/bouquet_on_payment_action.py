@@ -1,171 +1,162 @@
-# Bouquet: create SO from POS order on Assemble bouquet payment
-# Server action id=1203
-# Model: pos.payment
-# Trigger: base.automation id=10, on_create_or_write, filter [('payment_method_id', '=', 6)]
-# Last updated in prod: 2026-04-23
+# Bouquet reserve-model: Create / Reassemble / Sell branches
+# Server action id=1203 (v2 — reserve-model refactor, 2026-04-23)
+# Model: pos.order  (changed from pos.payment to ensure POS-picking exists at trigger time)
+# Trigger: base.automation 10, on_create_or_write, filter [('state', '=', 'paid')]
 #
-# What it does:
-# - Reassemble branch: creates sale.order BP-YYYY-NNNN (tech partner Anon id=53) when florist
-#   pays a POS order via "Собрать букет" (method id=6). If a Settle-linked old bouquet SO exists,
-#   cancels it and reverses its original POS picking — "reassemble" flow.
-# - Dismantle branch: triggered when pos.order has DISMANTLE_MARKER (product id=7865) AND
-#   at least one line with sale_order_origin_id → SO with partner_id=53. Cancels old SO,
-#   reverses old POS picking, cancels own future POS picking (belt-and-suspenders — see §44).
-#   Does NOT create new SO. If marker present without Settle-link → raises UserError.
-# - Idempotent via client_order_ref='POS#<pos_order.id>'.
+# Reserve-model principles:
+# - При создании букета (assemble) SO-picking остаётся assigned — reserve держит компоненты
+# - POS-picking от того же чека reverse'ится через layer 2 (action 1205) когда state=done
+# - При Settle с обычной оплатой (Sell) Odoo 19 штатно cancels SO-picking → POS-picking списывает → qty_delivered updated
+# - Reassemble = cancel старого SO (reserve отпускается) + create new SO (новый reserve)
+# - Маркер [BOUQUET-ASSEMBLY] (id=7864) автоматически добавляется в new SO с price=0 если забыт флористом
 #
-# Stock-leak prevention layers 2 & 3: bouquet_on_picking_action.py (id=1205),
-# bouquet_on_order_paid_action.py (id=1207). All three idempotent via reverse return check.
+# Branches:
+#   1. Create: method=6, no Settle → new BP-* SO, confirm, SO-picking assigned (reserve)
+#   2. Reassemble: method=6, has Settle → cancel old BP-* (close_reason='reassembled'), create new BP-* SO
+#   3. Sell: method !=6 (Cash/Card/etc), has Settle → close old SO (sold_full or sold_markdown), no new SO
+#   4. Noop: method != 6, no Settle → обычная POS-продажа, не наше дело
+#   5. Dismantle (method=8) — handled by separate action 1209
 #
-# Keys shared across the 3 actions:
-#   BOUQUET_METHOD_ID = 6              — payment method "Собрать букет"
-#   TECH_PARTNER_ID = 53               — Anon (клиент букета) res.partner
-#   DISMANTLE_MARKER_PRODUCT_ID = 7865 — [BQ-DISMANTLE] 🗑 Разборка букета
+# Studio fields written:
+#   x_studio_assembled_by (Create + Reassemble — на новом BP)
+#   x_studio_sold_by (Sell — на старом BP)
+#   x_studio_close_date (Reassemble + Sell — на старом BP)
+#   x_studio_close_reason ('reassembled' / 'sold_full' / 'sold_markdown' — на старом BP)
 #
-# See: [05_florists_logistics_accountant.md §1.2.3](05_florists_logistics_accountant.md),
-#      [99_invariants.md §32, §44](99_invariants.md)
+# sold_markdown triggered if either:
+#   - x_studio_markdown_pct > 0 on old SO (header-level markdown)
+#   - any pos.order.line.discount > 0 on non-marker lines
+#
+# Idempotency:
+#   - Assemble create: client_order_ref='POS#<id>' check
+#   - Sell: skip if x_studio_close_reason already set
+#
+# Constants (shared across 1203 и 1209):
+#   BOUQUET_ASSEMBLE_METHOD_ID = 6   — "🌹 Собрать / изменить букет"
+#   BOUQUET_DISMANTLE_METHOD_ID = 8  — "🗑 Разобрать букет" (in action 1209)
+#   TECH_PARTNER_ID = 53             — Anon
+#   ASSEMBLY_MARKER_PRODUCT_ID = 7864 — "🌹 Работа по сборке букета"
+#
+# See: 05_florists_logistics_accountant.md §1.2.x,
+#      99_invariants.md §32, §46
 
-BOUQUET_METHOD_ID = 6
+BOUQUET_ASSEMBLE_METHOD_ID = 6
+BOUQUET_DISMANTLE_METHOD_ID = 8
 TECH_PARTNER_ID = 53
-DISMANTLE_MARKER_PRODUCT_ID = 7865
+ASSEMBLY_MARKER_PRODUCT_ID = 7864
 SEQUENCE_BY_WH_CODE = {
     'PLA': 'espafloria.bouquet.plaza',
     'GLO': 'espafloria.bouquet.gloria',
     'BLA': 'espafloria.bouquet.blau',
 }
 
-def reverse_pos_picking(pick, env):
-    existing_return = env['stock.picking'].sudo().search([('return_id', '=', pick.id)], limit=1)
-    if existing_return:
-        return existing_return.id
-    move_lines_vals = []
-    for m in pick.move_ids.filtered(lambda mm: mm.state == 'done' and mm.product_uom_qty > 0):
-        move_lines_vals.append((0, 0, {
-            'product_id': m.product_id.id,
-            'quantity': m.product_uom_qty,
-            'move_id': m.id,
+def build_order_lines(pos_sudo):
+    """Build SO order_line vals. Auto-insert assembly marker (price=0) if missing."""
+    vals = []
+    has_marker = False
+    for pl in pos_sudo.lines:
+        if pl.qty == 0:
+            continue
+        if pl.product_id.id == ASSEMBLY_MARKER_PRODUCT_ID:
+            has_marker = True
+        vals.append((0, 0, {
+            'product_id': pl.product_id.id,
+            'product_uom_qty': pl.qty,
+            'price_unit': pl.price_unit,
+            'discount': pl.discount,
         }))
-    if not move_lines_vals:
-        return False
-    return_wizard = env['stock.return.picking'].sudo().with_context(
-        active_id=pick.id, active_ids=pick.ids, active_model='stock.picking',
-    ).create({'picking_id': pick.id, 'product_return_moves': move_lines_vals})
-    action_res = return_wizard.action_create_returns()
-    new_pick_id = action_res.get('res_id') if isinstance(action_res, dict) else False
-    if new_pick_id:
-        new_pick = env['stock.picking'].sudo().browse(new_pick_id)
-        for mv in new_pick.move_ids:
-            mv.write({'quantity': mv.product_uom_qty})
-        new_pick.with_context(skip_backorder=True).button_validate()
-    return new_pick_id
+    if not has_marker and vals:
+        vals.append((0, 0, {
+            'product_id': ASSEMBLY_MARKER_PRODUCT_ID,
+            'product_uom_qty': 1,
+            'price_unit': 0.0,
+            'discount': 0.0,
+        }))
+    return vals
 
 SaleOrderSudo = env['sale.order'].sudo()
+NOW = datetime.datetime.now()
 
-for payment in records:
-    pos_order = payment.pos_order_id
-    if not pos_order:
-        continue
+for pos_order in records:
     pos_sudo = pos_order.sudo()
     idem_key = 'POS#%d' % pos_order.id
-    existing = SaleOrderSudo.search([('client_order_ref', '=', idem_key)], limit=1)
-    if existing:
-        continue
-
-    has_marker = any(l.product_id.id == DISMANTLE_MARKER_PRODUCT_ID for l in pos_sudo.lines)
+    methods = set(pos_sudo.payment_ids.mapped('payment_method_id.id'))
+    is_assemble = BOUQUET_ASSEMBLE_METHOD_ID in methods
+    is_dismantle = BOUQUET_DISMANTLE_METHOD_ID in methods
+    if is_dismantle:
+        continue  # handled by action 1209
 
     origin_ids = []
     for l in pos_sudo.lines:
         oid = l.sale_order_origin_id.id if l.sale_order_origin_id else 0
-        so_from_sol = 0
-        if not oid and l.sale_order_line_id:
-            so_from_sol = l.sale_order_line_id.order_id.id
-        picked = oid or so_from_sol
-        if picked and picked not in origin_ids:
-            origin_ids.append(picked)
+        if oid and oid not in origin_ids:
+            origin_ids.append(oid)
+    all_origins = SaleOrderSudo.browse(origin_ids)
+    anon_origins = all_origins.filtered(lambda so: so.partner_id.id == TECH_PARTNER_ID)
+    has_settle = bool(anon_origins)
+    active_anon_sos = anon_origins.filtered(lambda so: so.state == 'sale')
 
-    all_found = SaleOrderSudo.browse(origin_ids)
-    tech_bouquet_sos = all_found.filtered(lambda so: so.partner_id.id == TECH_PARTNER_ID)
-    active_old_sos = tech_bouquet_sos.filtered(lambda so: so.state == 'sale')
+    employee = pos_order.employee_id
+    employee_name = employee.name if employee else 'флористом'
 
-    if has_marker and not tech_bouquet_sos:
-        raise UserError('Разборка букета: нет связи с активным букетом. Нажми Register → Orders, выбери букет BP-* для разборки, и потом добавь маркер "🗑 Разборка букета".')
+    # --- Sell branch (not is_assemble, has Settle) ---
+    if not is_assemble:
+        if not has_settle:
+            continue
+        unclosed = anon_origins.filtered(lambda so: not so.x_studio_close_reason)
+        if not unclosed:
+            continue  # already closed (idempotent against multiple pos.order writes)
 
-    is_dismantle = has_marker and bool(tech_bouquet_sos)
-    old_sos = active_old_sos
-
-    reassembled_from = []
-    if old_sos:
-        linked_lines = pos_sudo.lines.filtered(lambda l: l.sale_order_line_id)
-        if linked_lines:
-            linked_lines.write({'sale_order_line_id': False})
-        for old in old_sos:
-            old_pos_id = False
-            if old.client_order_ref and old.client_order_ref.startswith('POS#'):
-                try:
-                    old_pos_id = int(old.client_order_ref[4:])
-                except (ValueError, TypeError):
-                    old_pos_id = False
-            if old_pos_id:
-                old_pos = env['pos.order'].sudo().browse(old_pos_id).exists()
-                if old_pos:
-                    for opick in old_pos.picking_ids.filtered(lambda p: p.state == 'done'):
-                        try:
-                            reverse_pos_picking(opick, env)
-                        except Exception as e:
-                            try:
-                                old.message_post(body='[bouquet reverse] POS picking %s reverse FAILED: %s' % (opick.name, str(e)))
-                            except Exception:
-                                pass
-            for pick in old.picking_ids.filtered(lambda p: p.state not in ('done', 'cancel')):
-                moves_to_cancel = pick.move_ids.filtered(lambda m: m.state not in ('done', 'cancel'))
-                if moves_to_cancel:
-                    moves_to_cancel.write({'state': 'cancel'})
-                pick.write({'state': 'cancel'})
-            old.write({'state': 'cancel'})
-            reassembled_from.append(old)
-
-    if is_dismantle:
-        for cpick in pos_sudo.picking_ids:
-            if cpick.state == 'done':
-                try:
-                    reverse_pos_picking(cpick, env)
-                except Exception as e:
-                    target = reassembled_from[0] if reassembled_from else (tech_bouquet_sos[0] if tech_bouquet_sos else None)
-                    if target:
-                        try:
-                            target.message_post(body='[bouquet dismantle] Current POS picking %s reverse FAILED: %s' % (cpick.name, str(e)))
-                        except Exception:
-                            pass
-            elif cpick.state != 'cancel':
-                moves_to_cancel = cpick.move_ids.filtered(lambda m: m.state not in ('done', 'cancel'))
-                if moves_to_cancel:
-                    moves_to_cancel.write({'state': 'cancel'})
-                cpick.write({'state': 'cancel'})
-        for old in reassembled_from:
+        partner = pos_order.partner_id
+        is_anon_sale = (not partner) or partner.id == TECH_PARTNER_ID
+        partner_name = partner.name if partner else 'Anon (без выбора)'
+        # any line discount triggers sold_markdown (besides header markdown_pct)
+        has_line_discount = any(
+            pl.discount > 0
+            for pl in pos_sudo.lines
+            if pl.product_id.id != ASSEMBLY_MARKER_PRODUCT_ID and pl.qty > 0
+        )
+        for old in unclosed:
+            close_vals = {'x_studio_close_date': NOW, 'x_studio_sold_by': employee.id if employee else False}
+            so_markdown = old.x_studio_markdown_pct or 0
+            close_vals['x_studio_close_reason'] = 'sold_markdown' if (so_markdown > 0 or has_line_discount) else 'sold_full'
             try:
-                old.message_post(body='🗑 Разобран через POS %s.' % (pos_order.name or ('POS#%d' % pos_order.id)))
+                old.sudo().write(close_vals)
             except Exception:
                 pass
+            try:
+                msg = '💰 Продан %s клиенту %s через POS %s. Итого %.2f€.' % (
+                    employee_name, partner_name, pos_order.name, pos_order.amount_total
+                )
+                if has_line_discount and so_markdown == 0:
+                    msg += ' 💸 Скидки на строках в чеке.'
+                if is_anon_sale:
+                    msg += ' ⚠️ Анонимная продажа (клиент не выбран — флорист не собрал CRM).'
+                old.sudo().message_post(body=msg)
+            except Exception:
+                pass
+        continue
+
+    # --- Assemble (Create + Reassemble) ---
+    if SaleOrderSudo.search([('client_order_ref', '=', idem_key)], limit=1):
+        continue  # already processed
+
+    if has_settle:
+        for old in active_anon_sos:
+            try:
+                old.sudo().write({'x_studio_close_date': NOW, 'x_studio_close_reason': 'reassembled'})
+            except Exception:
+                pass
+            old.sudo().action_cancel()
+
+    order_line_vals = build_order_lines(pos_sudo)
+    if not order_line_vals:
         continue
 
     wh = pos_sudo.session_id.config_id.warehouse_id
     seq_code = SEQUENCE_BY_WH_CODE.get(wh.code)
     so_name = env['ir.sequence'].sudo().next_by_code(seq_code) if seq_code else False
 
-    order_line_vals = []
-    for pl in pos_sudo.lines:
-        if pl.product_id.id == DISMANTLE_MARKER_PRODUCT_ID:
-            continue
-        if pl.qty == 0:
-            continue
-        order_line_vals.append((0, 0, {
-            'product_id': pl.product_id.id,
-            'product_uom_qty': pl.qty,
-            'price_unit': pl.price_unit,
-            'discount': pl.discount,
-        }))
-    if not order_line_vals:
-        continue
     origin_val = pos_order.name if (pos_order.name and pos_order.name != '/') else ('POS#%d' % pos_order.id)
     so_vals = {
         'partner_id': TECH_PARTNER_ID,
@@ -177,23 +168,45 @@ for payment in records:
     }
     if so_name:
         so_vals['name'] = so_name
+    if employee:
+        so_vals['x_studio_assembled_by'] = employee.id
     so = SaleOrderSudo.create(so_vals)
 
-    non_zero_non_marker = [pl for pl in pos_sudo.lines if pl.product_id.id != DISMANTLE_MARKER_PRODUCT_ID and pl.qty > 0]
-    for pl, sol in zip(non_zero_non_marker, so.order_line):
-        sol.write({'price_unit': pl.price_unit, 'discount': pl.discount})
+    # Restore price/discount (pricelist onchange may overwrite)
+    pl_lines = [pl for pl in pos_sudo.lines if pl.qty > 0]
+    for i, pl in enumerate(pl_lines):
+        if i < len(so.order_line):
+            sol = so.order_line[i]
+            sol.write({'price_unit': pl.price_unit, 'discount': pl.discount})
 
-    so.action_confirm()
+    so.action_confirm()  # SO-picking → assigned (reserve-model)
+    # DO NOT cancel SO-picking — reserve holds components
+    # POS-picking reverse handled by layer 2 (action 1205 on stock.picking)
 
-    for pick in so.picking_ids.filtered(lambda p: p.state not in ('done', 'cancel')):
-        moves_to_cancel = pick.move_ids.filtered(lambda m: m.state not in ('done', 'cancel'))
-        if moves_to_cancel:
-            moves_to_cancel.write({'state': 'cancel'})
-        pick.write({'state': 'cancel'})
-
-    for old in reassembled_from:
+    if has_settle:
+        old_names = ', '.join(active_anon_sos.mapped('name'))
         try:
-            so.message_post(body='Пересобран из %s.' % old.name)
-            old.message_post(body='Пересобран в %s.' % so.name)
+            so.sudo().message_post(
+                body='✏️ Пересобран %s из %s через POS %s.' % (employee_name, old_names, pos_order.name)
+            )
+        except Exception:
+            pass
+        for old in active_anon_sos:
+            try:
+                old.sudo().message_post(
+                    body='✏️ Пересобран %s в %s через POS %s.' % (employee_name, so.name, pos_order.name)
+                )
+            except Exception:
+                pass
+    else:
+        components = ', '.join([
+            sol.product_id.name
+            for sol in so.order_line
+            if sol.product_id.id != ASSEMBLY_MARKER_PRODUCT_ID
+        ])
+        try:
+            so.sudo().message_post(
+                body='🌹 Собран %s через POS %s. Состав: %s.' % (employee_name, pos_order.name, components)
+            )
         except Exception:
             pass

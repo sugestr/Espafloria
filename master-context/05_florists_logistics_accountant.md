@@ -1,4 +1,4 @@
-<!-- v: 5 | updated: 2026-04-23T01:40Z -->
+<!-- v: 6 | updated: 2026-04-23T13:45Z -->
 # 05. Роли и рабочие процессы
 
 Статус: 🔴 **CONCEPT / PARTIAL** — функциональные spec-и описаны, реализация UX частично.
@@ -56,70 +56,107 @@
 - Может быть собран и **не продан сразу** (витрина), потом продан
 - Может быть модифицирован / разобран после сборки
 
-#### 1.2.1. Создание букета
+#### 1.2.1. Создание букета (Create)
 
-- Сборка → появляется новая сущность
-- **Обязательно:** фото букета при создании
-- **Обязательно:** уникальный номер
-- **Обязательно:** печать ценника / этикетки
+🟢 **IMPLEMENTED 2026-04-23 v2 (reserve-model) через action 1203 branch create.**
+
+Флорист-флоу:
+1. В POS сканирует/пробивает компоненты (розы, зелень, упаковка).
+2. Опционально жмёт кнопку **«🌹 Работа по сборке букета»** (product 7864, service, 5€ default с IVA 10%). Если забыл — скрипт сам добавит в SO с price=0 (без бонуса флористу).
+3. Корректирует финальную цену букета если нужно (ручная правка строк).
+4. Payment → метод **«🌹 Собрать / изменить букет»** (id=6) → Validate.
+
+Серверная логика (action 1203 branch create):
+- Создаёт SO `BP-YYYY-NNNN` с `partner_id=53` (Anon), warehouse из config, все POS-линии + auto-marker если нужен.
+- `action_confirm()` → SO-picking встаёт в **`assigned`** (reserve).
+- **НЕ cancel SO-picking** — в этом суть reserve-model.
+- Reverse POS-picking (которое Odoo создал и списало) → компоненты возвращаются на склад, где их держит reserve нового SO.
+- Chatter в SO: «🌹 Собран <флористом> через POS-NNN. Состав: ...»
+
+**Результат на складе:** компоненты **не списаны**, а **зарезервированы**. `stock.quant.quantity` не изменился, `reserved_quantity` += 1 на каждый компонент. `available_quantity` уменьшился — другой чек не заберёт.
 
 **Цена:**
-- Система предлагает цену (сумма компонентов + наценка / правило)
-- Флорист может **слегка корректировать** вручную (вверх/вниз)
-- У букета могут быть **две цены:**
-  - Цена для витрины / магазина
-  - Цена для online / marketplace
-- Скидка — **на уровне букета**, не на уровне строк компонентов ([инвариант 32](99_invariants.md))
+- Система предлагает цену (сумма компонентов + маркер сборки + наценка)
+- Флорист может корректировать вручную
+- Скидка — на уровне букета, не на строках компонентов ([99 §32](99_invariants.md))
 
-#### 1.2.2. Модификация готового букета
+#### 1.2.2. Модификация букета (Reassemble)
 
-**Реальный сценарий:** *«Другой флорист взял уже готовый букет, добавил пару роз, одну розу списал как завявшую, потом продал.»*
+**Реальный сценарий:** *«Другой флорист взял уже готовый букет, добавил пару роз, одну розу списал как завявшую, потом вернул на витрину.»*
 
-🟢 **IMPLEMENTED 2026-04-23 через reassemble-ветку action 1203.**
+🟢 **IMPLEMENTED 2026-04-23 v2 через action 1203 branch reassemble.**
 
 Флорист-флоу:
-1. В POS нажимает **Orders → Register** → выбирает букет `BP-*` → Settle. В корзину автоматически падают все линии с `sale_order_origin_id` → старый SO.
-2. **Модификация прямо в корзине:**
-    - Добавить компонент — сканом или кнопкой товара.
-    - Удалить компонент — qty=0 или кнопка «удалить строку».
-    - Изменить цену — Price-кнопка на строке.
-3. Payment → метод **«Собрать букет»** → Validate. Маркер `🗑 Разборка букета` **НЕ** добавляется.
+1. В POS: **Orders → Settle BP-*** → в корзину падают все линии с `sale_order_origin_id`.
+2. Правит в корзине: qty=0 на убираемом компоненте, скан нового компонента, ручная правка цены.
+3. Payment → метод **«🌹 Собрать / изменить букет»** (id=6) → Validate.
 
-Серверная логика (action 1203, ветка reassemble):
-- Находит старый SO через `sale_order_origin_id` на линиях (partner=Anon id=53, state=sale).
-- Старый SO → `cancel`, его SO-picking → `cancel`, оригинальный POS-picking → reverse (return picking done).
-- Создаёт **новый** SO `BP-YYYY-NNNN` из текущих линий POS (с уже отредактированными qty/price).
-- Новый SO `action_confirm()` → SO-picking → `cancel` (stock уже списан через оригинальный POS-picking текущего POS-order'а).
-- В chatter: старый постит «Пересобран в BP-YYYY», новый — «Пересобран из BP-XXXX».
+Серверная логика (action 1203 branch reassemble):
+- Находит old SO через `sale_order_origin_id` (partner=53, state=sale).
+- `old.action_cancel()` → SO штатно cancelled, его SO-picking тоже cancel (reserve отпустилась).
+- Создаёт **new** SO `BP-YYYY-NNNN` с текущим составом.
+- `action_confirm()` → new SO-picking assigned (новый reserve).
+- Reverse POS-picking → стоки возвращаются, new reserve держит.
+- Chatter: old «✏️ Пересобран в <new>», new «✏️ Пересобран из <old>».
 
-**Net stock:** компоненты старого букета вернулись на склад (reverse оригинального ship), компоненты нового ушли клиенту (ship текущего POS-order'а). Если добавили розу — она ушла. Убрали мадроньо — вернулось.
+**Net stock:** reserve перевесился со старого BP на новый. Убрал розу — она не в reserve, free. Добавил вазу — она теперь в reserve.
 
-**Отличие от разборки:** нет маркера `7865` → action 1203 идёт в reassemble-ветку, не dismantle. Разборка = только cancel старого, без нового SO. Модификация = cancel старого + новый SO с обновлёнными линиями.
+#### 1.2.3. Продажа букета клиенту (Sell)
 
-**Списание завядшей розы:** пока не покрыто reassemble'ом — нужен отдельный workflow с фото-согласованием (см. [99 §31](99_invariants.md), [09 P3](09_open_work.md)).
+**Сценарий:** клиент пришёл за готовым букетом с витрины, или флорист слегка подправил состав и сразу продал известному клиенту.
 
-#### 1.2.3. Разборка букета
-
-**Реализовано через POS Settle + маркер (payment method «Собрать букет», id=6).**
+🟢 **IMPLEMENTED 2026-04-23 v2 через штатный Odoo + action 1203 branch sell (только chatter).**
 
 Флорист-флоу:
-1. В POS нажимает **Orders → Register** → выбирает букет `BP-*` из списка → Settle. В корзину автоматически падают все линии компонентов с `sale_order_origin_id` → старый SO.
-2. Добавляет товар **`🗑 Разборка букета`** (product id=`7865`, категория `[BQ-DISMANTLE]`, service, price=0) — маркер.
-3. Payment → метод **«Собрать букет»** → Validate. Платёж нулевой по сути (Settle уже списал баланс старого SO).
+1. В POS: **Orders → Settle BP-*** → в корзину падают компоненты.
+2. Опционально правит состав (добавил розу, убрал упаковку).
+3. Опционально выбирает known-клиента для CRM / LTV.
+4. Payment → **Cash / Card / eWallet / etc** (любой обычный метод, **НЕ** «Собрать / изменить букет») → Validate.
 
-Серверная логика (все idempotent, срабатывают при оплате):
+Серверная логика (**штатная Odoo 19, не наш код**):
+- Odoo cancels SO-picking старого BP (он был assigned).
+- POS-picking этого чека списывает компоненты через свой move (реальная отгрузка).
+- `sale.order.line.qty_delivered` обновляется на совпавших линиях.
+- `sale.order.invoice_status=invoiced` (через POS payment hook).
 
-| Автоматика | Модель | Триггер | Действие |
+Наш action 1203 branch sell **только** пишет chatter в old SO: «💰 Продан <флористом> клиенту <partner> через POS-NNN. Итого X€.»
+
+**Net stock:** компоненты физически ушли клиенту (списаны ровно 1 раз через POS-picking, без двойного списания — потому что SO-picking был в assigned, а не cancel). Подтверждено тестом 1.1 ([CHANGELOG 2026-04-23](CHANGELOG.md)).
+
+#### 1.2.4. Разборка букета (Dismantle)
+
+**Сценарий:** букет завял/не продался/клиент отказался, вернуть компоненты в наличие.
+
+🟢 **IMPLEMENTED 2026-04-23 v2 через отдельный action 1209 и отдельный payment method.**
+
+Флорист-флоу:
+1. В POS: **Orders → Settle BP-*** → компоненты в корзине.
+2. Payment → метод **«🗑 Разобрать букет»** (id=8) → Validate.
+
+Серверная логика (action 1209):
+- Находит old SO через `sale_order_origin_id` (partner=53, state=sale).
+- Если не нашёл — `raise UserError` («нет связи с активным букетом»).
+- `old.action_cancel()` → SO и SO-picking cancelled, reserve отпустилась полностью.
+- Reverse POS-picking → компоненты возвращаются на склад (stock +1 на каждый).
+- Chatter: «🗑 Разобран <флористом> через POS-NNN. Компоненты возвращены на склад.»
+
+**Net stock:** 0. Reserve снят, физически ничего не двинулось.
+
+#### 1.2.5. Архитектурный summary (v2)
+
+| Сценарий | Method оплаты | Наш код | Штатный Odoo |
 |---|---|---|---|
-| `base.automation 10` → `ir.actions.server 1203` | `pos.payment` | `on_create_or_write`, `payment_method_id=6` | Если в линиях есть маркер 7865 + хотя бы одна линия с `sale_order_origin_id` указывает на SO с `partner_id=53` (Anon) — ветка `is_dismantle`: старый SO → `cancel`, его SO-picking → `cancel`, оригинальный POS-picking → reverse (return picking done). НЕ создаёт новый SO. Если маркер есть, но tech-bouquet-SO не найдена — `raise UserError` с подсказкой «нажми Register → Orders, выбери BP-* и добавь маркер». |
-| `base.automation 11` → `ir.actions.server 1205` | `stock.picking` | `on_create_or_write` | Когда у нового POS-picking'а финально проставлен `origin = pos.order.name` и `state=done` (POS проставляет origin последним, после validate) — если POS содержит маркер 7865, picking реверсится через `stock.return.picking` (idempotent по `return_id`). Для `state ∈ {draft, assigned}` — пытается `.write({'state': 'cancel'})`. |
-| `base.automation 12` → `ir.actions.server 1207` | `pos.order` | `on_create_or_write`, `state=paid` | Safety net. Перебирает `picking_ids`; если есть `done` без `return_id` — реверсит. Срабатывает многократно (каждый write на pos.order), но idempotent. |
+| 1. Собрать на витрину | «🌹 Собрать / изменить букет» (6) | Action 1203 branch create: SO BP-*, confirm → assigned, reverse POS-picking | — |
+| 2. Модификация | «🌹 Собрать / изменить букет» (6) | Action 1203 branch reassemble: cancel old, create new BP-*, confirm → assigned, reverse POS-picking | — |
+| 3. Продажа клиенту | Cash / Card / любой обычный | Action 1203 branch sell: только chatter | cancel SO-picking, POS-picking списывает, qty_delivered += 1 |
+| 4. Разборка | «🗑 Разобрать букет» (8) | Action 1209: cancel old, reverse POS-picking | — |
+| 5. Собрал+продал одним чеком | Cash / Card + маркер в корзине | Обычный POS-чек | Стандартный |
 
-Нетто-эффект по складу = 0: оригинальный ship компонентов и новый ship от dismantle-POS оба reversed.
-
-**Требует от флориста:** корректно сделать Settle (не просто ручной выбор компонентов) — иначе в `pos.order.line.sale_order_origin_id` будет `False`, и слой 1 выдаст UserError.
-
-Marker-product создан через `product.template` id=7865, SKU `BQ-DISMANTLE`, `detailed_type=service`, `pos_categ_ids` содержит кнопку «Разборка». См. инвариант [99 §46](99_invariants.md).
+**Что не используется больше (v1 deprecated):**
+- Product 7865 `[BQ-DISMANTLE]` — archived.
+- Actions 1205 / 1207 — в базе, но их automations 11/12 disabled.
+- Ветка dismantle в action 1203 — удалена, перенесена в action 1209.
+- Cancel SO-picking после action_confirm — убран (ломал reserve-model).
 
 #### 1.2.4. Две формы одного жизненного цикла
 
