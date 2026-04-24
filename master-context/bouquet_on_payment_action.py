@@ -11,11 +11,19 @@
 # - Маркер [BOUQUET-ASSEMBLY] (id=7864) автоматически добавляется в new SO с price=0 если забыт флористом
 #
 # Branches:
-#   1. Create: method=6, no Settle → new BP-* SO, confirm, SO-picking assigned (reserve)
-#   2. Reassemble: method=6, has Settle → cancel old BP-* (close_reason='reassembled'), create new BP-* SO
+#   1. Create: method=6, no Settle → new BP-* SO, confirm, SO-picking assigned (reserve),
+#      pos.order.partner_id := TECH_PARTNER_ID for POS Orders list visibility
+#   2. Reassemble: method=6, has Settle → cancel old BP-* (close_reason='reassembled'), create new BP-* SO,
+#      pos.order.partner_id := TECH_PARTNER_ID
 #   3. Sell: method !=6 (Cash/Card/etc), has Settle → close old SO (sold_full or sold_markdown), no new SO
 #   4. Noop: method != 6, no Settle → обычная POS-продажа, не наше дело
 #   5. Dismantle (method=8) — handled by separate action 1209
+#
+# UX note (added 2026-04-25): on assemble we explicitly write pos.order.partner_id = TECH_PARTNER_ID
+# so the receipt shows "🌹 Букет на витрину" in POS → Orders list. Without this, partner_id stays
+# false and chef/accountant cannot visually distinguish assembly receipts from real customer sales.
+# Pure UX label, zero business-logic impact. Re-firing the automation on this write hits the
+# idempotency check (client_order_ref) and no-ops.
 #
 # Studio fields written:
 #   x_studio_assembled_by (Create + Reassemble — на новом BP)
@@ -182,6 +190,14 @@ for pos_order in records:
     so.action_confirm()  # SO-picking → assigned (reserve-model)
     # DO NOT cancel SO-picking — reserve holds components
     # POS-picking reverse handled by layer 2 (action 1205 on stock.picking)
+
+    # 2026-04-25: Set pos.order.partner_id = TECH_PARTNER_ID so the receipt shows
+    # "🌹 Букет на витрину" in POS → Orders. Safe after state=paid (editable for invoicing).
+    # Automation re-fires on write but hits client_order_ref idempotency check and no-ops.
+    try:
+        pos_sudo.write({'partner_id': TECH_PARTNER_ID})
+    except Exception:
+        pass
 
     if has_settle:
         old_names = ', '.join(active_anon_sos.mapped('name'))

@@ -1,4 +1,4 @@
-<!-- v: 19 | updated: 2026-04-23T16:40Z -->
+<!-- v: 20 | updated: 2026-04-25T00:30Z -->
 # CHANGELOG
 
 Одна строка на worker-сессию. Детали — `git log master-context/` или `git show <sha>`.
@@ -7,6 +7,7 @@
 
 ---
 
+- 2026-04-25 — **Ship Later E2E validated + config polish**: live-тест на Pedro (21.94€ PLA/OUT/00018 + 16.02€ PLA/OUT/00020 от букета BP-2026-0015). Validate на 00020 → SO qty_delivered обновился через POS payment hook, invoice_status=invoiced — связка Ship Later + reserve-model (инв 46 v2) держит. Partner 53 переименован `Anon (клиент букета)` → `🌹 Букет на витрину`. Warehouse `Temporal` (id=5, пустой) архивирован. `picking_policy=one` на всех 3 POS (было `direct`) — букет отгружается целиком. Studio view 4473 fix: x_studio_paper_qty/paper_unit/expected_qty_info/received_packs/review_status + кнопка «Посчитать в магазине» скрыты (`column_invisible`) когда `picking_type_code != 'incoming'` — не засоряют delivery форму. Action 1203 patch: на assemble (create/reassemble) теперь пишется `pos.order.partner_id = TECH_PARTNER_ID=53` после `so.action_confirm()` — чек сборки визуально отличается от продажи в POS → Orders list (колонка Customer = «🌹 Букет на витрину» вместо пустой).
 - 2026-04-23 — **Claude session feedback persisted to git**: создан `claude_session_feedback.md` со всеми 6 lessons learned (Odoo methods vs writes, stock.return.picking API, discount overwrite, Odoo 19 docs, closed sessions, Cowork git workflow). Backup для memory/ файлов которые иначе живут только в Claude session storage. Любая новая сессия должна прочитать этот файл при старте.
 - 2026-04-23 — **Bouquet reserve-model v2 refactor**: test 1.1 доказал что Odoo 19 штатно защищает от double-stock при Settle+Cash если SO-picking=assigned (не cancel). Action 1203 переписан: create/reassemble/sell branches, НЕ cancel SO-picking. New action 1209 для dismantle по отдельному method id=8 «🗑 Разобрать букет». Ship_later включён на 3 POS для сценария «доставка позже». Product 7865 archived. Automations 11/12 disabled (не нужны в reserve-model). New payment method «🗑 Разобрать букет» (id=8) attached to all 3 POS configs. Feedback memory: methods vs writes + POS config changes need closed sessions. §46 переписан под reserve-model, §1.2.1-1.2.5 reformated.
 - 2026-04-23 — Bouquet modify (reassemble) documented in 05 §1.2.2 — same action 1203 без маркера: Settle + правка в корзине + «Собрать букет» → старый SO cancel + новый SO с обновлёнными линиями. Закрыт open question в §1.2.2. 09 workstream обновлён: Modify галочка.

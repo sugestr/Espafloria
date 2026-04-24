@@ -1,4 +1,4 @@
-<!-- v: 6 | updated: 2026-04-23T13:45Z -->
+<!-- v: 7 | updated: 2026-04-25T00:30Z -->
 # 05. Роли и рабочие процессы
 
 Статус: 🔴 **CONCEPT / PARTIAL** — функциональные spec-и описаны, реализация UX частично.
@@ -67,7 +67,7 @@
 4. Payment → метод **«🌹 Собрать / изменить букет»** (id=6) → Validate.
 
 Серверная логика (action 1203 branch create):
-- Создаёт SO `BP-YYYY-NNNN` с `partner_id=53` (Anon), warehouse из config, все POS-линии + auto-marker если нужен.
+- Создаёт SO `BP-YYYY-NNNN` с `partner_id=53` (🌹 Букет на витрину), warehouse из config, все POS-линии + auto-marker если нужен.
 - `action_confirm()` → SO-picking встаёт в **`assigned`** (reserve).
 - **НЕ cancel SO-picking** — в этом суть reserve-model.
 - Reverse POS-picking (которое Odoo создал и списало) → компоненты возвращаются на склад, где их держит reserve нового SO.
@@ -513,8 +513,8 @@
 - [ ] Видит 3-точечную сверку в pedido (`qty_received` + `qty_invoiced` в view)
 
 **POS / warehouses:**
-- [ ] 3 кассы (Plaza / Gloria / Blau) заводят продажи
-- [ ] 🔴 **Config fix:** создать warehouses для Gloria и Blau, перепривязать POS Gloria → warehouse Gloria, POS Blau → warehouse Blau. Сейчас все 3 POS на `warehouse_id=2` (Plaza) — ошибка конфигурации.
+- [x] 3 кассы (Plaza / Gloria / Blau) заводят продажи, каждая на своём warehouse (Plaza id=2 / Gloria id=3 / Blau id=4)
+- [x] Ship Later включён на всех 3 POS, `picking_policy=one` (букет отгружается целиком, без частичных backorder'ов)
 - [ ] Базовый ценник (брендинг позже)
 
 **Авторизация / смены:**

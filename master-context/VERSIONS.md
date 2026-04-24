@@ -1,4 +1,4 @@
-<!-- v: 19 | updated: 2026-04-23T16:40Z -->
+<!-- v: 20 | updated: 2026-04-25T00:30Z -->
 # VERSIONS
 
 Индекс версий всех `.md` в базе. **`v` в header этого файла — маркер синка всей базы** (см. [SYNC_STATE.md](SYNC_STATE.md)).
@@ -12,16 +12,16 @@
 | Файл | v | Updated (UTC) |
 |---|---|---|
 | `README.md` | 8 | 2026-04-19T22:15Z |
-| `VERSIONS.md` | 18 | 2026-04-23T13:50Z |
+| `VERSIONS.md` | 20 | 2026-04-25T00:30Z |
 | `SYNC_STATE.md` | 10 | 2026-04-19T22:15Z |
-| `CHANGELOG.md` | 18 | 2026-04-23T13:50Z |
-| `00_master_index.md` | 12 | 2026-04-23T01:40Z |
+| `CHANGELOG.md` | 20 | 2026-04-25T00:30Z |
+| `00_master_index.md` | 13 | 2026-04-25T00:30Z |
 | `00_source_files_index.md` | 6 | 2026-04-19T12:30Z |
 | `01_business_context.md` | 5 | 2026-04-23T01:40Z |
 | `02_makecom_bot.md` | 6 | 2026-04-19T23:30Z |
 | `03_odoo_receipt_review.md` | 2 | 2026-04-19T15:00Z |
 | `04_holded_migration.md` | 3 | 2026-04-19T15:00Z |
-| `05_florists_logistics_accountant.md` | 6 | 2026-04-23T13:45Z |
+| `05_florists_logistics_accountant.md` | 7 | 2026-04-25T00:30Z |
 | `06_catalog_migration_toolkit.md` | 4 | 2026-04-19T23:45Z |
 | `07_infrastructure_devops.md` | 3 | 2026-04-19T15:00Z |
 | `08_current_state_snapshot.md` | 7 | 2026-04-23T01:30Z |
@@ -29,7 +29,7 @@
 | `10_vision_and_roadmap.md` | 4 | 2026-04-19T15:00Z |
 | `11_crm_and_customers.md` | 1 | 2026-04-18T16:35Z |
 | `12_ai_workflow.md` | 9 | 2026-04-19T22:15Z |
-| `99_invariants.md` | 7 | 2026-04-23T13:40Z |
+| `99_invariants.md` | 8 | 2026-04-25T00:30Z |
 | `claude_session_feedback.md` | 1 | 2026-04-23T16:35Z |
 
 ---

@@ -1,4 +1,4 @@
-<!-- v: 12 | updated: 2026-04-23T01:40Z -->
+<!-- v: 13 | updated: 2026-04-25T00:30Z -->
 # Master Context — Espafloria Odoo Automation
 
 **Last updated:** 2026-04-19
@@ -113,7 +113,7 @@ Note: в Project knowledge точки в именах заменяются на 
 | **POS Category** | `pos.category` (m2m через `pos_categ_ids`) — UX-группировка на экране кассира. Отличается от `product.category` (categ_id, m2o, бухгалтерская). См. [99 §40](99_invariants.md) |
 | **POS Terminal user** | Dedicated non-admin `res.users` (id=5, login `pos_terminal@espafloria.local`, groups [1, 87]) — один на все 3 планшета касс. Чеки через PIN прилипают к `hr.employee`, не к этому user (см. [08 § C](08_current_state_snapshot.md)) |
 | **Efectivo per-POS** | Каждая касса имеет свой `pos.payment.method` типа cash (EFPL/EFGL/EFBL) — требование Odoo. Одинаковый GL `570001`, разные journal codes для per-POS tracking бухгалтером |
-| **Anon (клиент букета)** | Технический `res.partner` id=53 (`TECH_PARTNER_ID`), на котором висят все `sale.order BP-*` как владелец. До продажи букета покупатель ещё неизвестен → партнёр общий. См. [99 §32/§46](99_invariants.md) |
+| **🌹 Букет на витрину** | Технический `res.partner` id=53 (`TECH_PARTNER_ID`), на котором висят все `sale.order BP-*` как владелец. До продажи букета покупатель ещё неизвестен → партнёр общий. См. [99 §32/§46](99_invariants.md). Ранее назывался «Anon (клиент букета)» — переименован 25 апр 2026 для ясности в POS Orders list |
 | **BP-YYYY-NNNN** | Имя `sale.order` для букета, per-warehouse sequence (`espafloria.bouquet.plaza/.gloria/.blau`). Создаётся action 1203 при оплате POS методом «Собрать букет». См. [05 §1.2.1](05_florists_logistics_accountant.md) |
 | **Маркер разборки / 🗑 Разборка букета** | `product.product` id=7865 (`BQ-DISMANTLE`), service, price=0. Добавленный в POS cart вместе с Settle букета + оплата «Собрать букет» → триггерит dismantle-ветку action 1203. Без маркера — reassemble-ветка. См. [05 §1.2.3](05_florists_logistics_accountant.md), [99 §46](99_invariants.md) |
 | **Reassemble vs Dismantle** | Две ветки action 1203 (оба через Settle). **Reassemble**: нет маркера → старый SO cancel + **новый SO создаётся** из текущих линий (модификация букета). **Dismantle**: есть маркер → старый SO cancel, **нового SO нет** (разборка на компоненты). См. [05 §1.2.2–1.2.3](05_florists_logistics_accountant.md) |

@@ -1,4 +1,4 @@
-<!-- v: 7 | updated: 2026-04-23T13:40Z -->
+<!-- v: 8 | updated: 2026-04-25T00:30Z -->
 # 99. Invariants — железные правила проекта
 
 **Читать перед любыми изменениями в системе.** Нарушение этих правил создаёт техдолг, ломает бот или теряет данные.
@@ -320,14 +320,14 @@ Reference: [Odoo Help — Configure accounts for Gift Card and eWallet](https://
 
 ### 46. Букет = незаконченная продажа, зарезервировавшая товар на складе
 
-**Модель:** букет на витрине — это `sale.order` с `partner_id=53` (Anon), `state=sale`, у которого `SO-picking.state=assigned` (reserve держит компоненты). **Не** `done` (не ушли клиенту) и **не** `cancel` (не отменён). Физически компоненты лежат в магазине, но системно зарезервированы — другая продажа их не заберёт.
+**Модель:** букет на витрине — это `sale.order` с `partner_id=53` (Букет на витрину), `state=sale`, у которого `SO-picking.state=assigned` (reserve держит компоненты). **Не** `done` (не ушли клиенту) и **не** `cancel` (не отменён). Физически компоненты лежат в магазине, но системно зарезервированы — другая продажа их не заберёт.
 
 **Четыре жизненных перехода**, все идут через один код в `ir.actions.server id=1203` + `id=1209`:
 
 | # | Триггер | Ветка action | Что делает |
 |---|---|---|---|
-| **Create** | `pos.payment` method=6 + нет Settle-линка | 1203 branch create | Создаёт SO BP-* на Anon, `action_confirm()` → SO-picking assigned, reverse POS-picking (стоки возвращаются, reserve держит) |
-| **Reassemble** | `pos.payment` method=6 + есть Settle-линка на Anon SO | 1203 branch reassemble | `old.action_cancel()` → new SO BP-* с текущим составом, confirm, SO-picking assigned, reverse POS-picking |
+| **Create** | `pos.payment` method=6 + нет Settle-линка | 1203 branch create | Создаёт SO BP-* на `🌹 Букет на витрину`, `action_confirm()` → SO-picking assigned, reverse POS-picking (стоки возвращаются, reserve держит) |
+| **Reassemble** | `pos.payment` method=6 + есть Settle-линка на витринный SO | 1203 branch reassemble | `old.action_cancel()` → new SO BP-* с текущим составом, confirm, SO-picking assigned, reverse POS-picking |
 | **Sell** | `pos.payment` method ≠ 6 (Cash/Card/etc) + есть Settle-линка | 1203 branch sell | **Только chatter**. Odoo 19 штатно cancels SO-picking, POS-picking списывает, qty_delivered обновляется. Нам остаётся только логировать |
 | **Dismantle** | `pos.payment` method=8 | 1209 | `old.action_cancel()`, reverse POS-picking (стоки на склад) |
 
@@ -338,7 +338,7 @@ Reference: [Odoo Help — Configure accounts for Gift Card and eWallet](https://
 **Автоматически вставляемый маркер:** если POS-линии не содержат `[BOUQUET-ASSEMBLY]` (id=7864, `🌹 Работа по сборке букета`) — action 1203 branch create/reassemble добавляет его в new SO с `qty=1, price=0`. Бизнес-логика: флорист сам добавил с 5€ → бонус ему; скрипт добавил c 0€ → нет бонуса, но маркер для аналитики есть.
 
 **Где не нарушать константы:**
-- `TECH_PARTNER_ID = 53` — Anon res.partner
+- `TECH_PARTNER_ID = 53` — `🌹 Букет на витрину` res.partner
 - `BOUQUET_ASSEMBLE_METHOD_ID = 6` — «🌹 Собрать / изменить букет»
 - `BOUQUET_DISMANTLE_METHOD_ID = 8` — «🗑 Разобрать букет»
 - `ASSEMBLY_MARKER_PRODUCT_ID = 7864` — «🌹 Работа по сборке букета»
