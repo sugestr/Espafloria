@@ -9,7 +9,7 @@
 
 ## 1. Архитектурный слой
 
-**Разделение двух слоёв** ([01_project § 2.1](01_project.md)):
+**Разделение двух слоёв** ([01_project § 4.1](01_project.md)):
 
 | Слой | Модели | Задача |
 |---|---|---|
@@ -286,7 +286,7 @@ for record in self:
 ## См. также
 
 - [02_makecom_bot.md](02_makecom_bot.md) — reconciliation слой (бот, OCR, learned codes).
-- [01_project.md](01_project.md) — § 2.1-2.3 архитектурные истины (paper≠fact).
+- [01_project.md](01_project.md) — § 4.1 бизнес-правило «истина = пересчёт флористом».
 - [04_pos_and_roles.md](04_pos_and_roles.md) — роль логиста и связь с приёмкой.
 - [05_catalog.md](05_catalog.md) — откуда берутся карточки + миграция supplierinfo.
 - [99_invariants.md](99_invariants.md) — гл. правила + Odoo 19 gotchas (G1-G5 про automation, G2 про watched fields).
