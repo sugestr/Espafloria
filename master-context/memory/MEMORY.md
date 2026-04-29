@@ -1,0 +1,17 @@
+- [Odoo state machines — use штатный action](feedback_odoo_state_machines.md) — не патчить state через write если есть штатный action; иначе ломаются computed (как было с pos.session.stop_at)
+- [Odoo 19 stock.return.picking API](feedback_odoo19_stock_return_picking.md) — нет location_id в vals; нужен .sudo() из POS-user контекста; action_create_returns() возвращает dict с res_id
+- [sale.order.line discount перезатирается на create](feedback_sale_order_discount_onchange.md) — discount теряется при create из-за pricelist onchange; после create делать .write({'discount': ...}) на линиях
+- [Всегда смотреть актуальные Odoo 19 docs](feedback_odoo_version_docs.md) — не утверждать поведение POS/SO/stock/Settle из памяти; проверять live-базу, наши snapshots и docs 19 перед выводами
+- [Всегда смотреть актуальные Holded API docs](feedback_holded_api_docs.md) — та же дисциплина для Holded: docs + MCP tool defs + test call перед bulk; моя тренировочная память по Holded скудная и устаревшая
+- [POS config changes требуют closed sessions](feedback_pos_config_changes.md) — перед update payment methods / warehouse / picking_type проверить что все сессии closed, включая auto-созданную opening_control после закрытия
+- [Cowork git workflow — git ops через Desktop Commander, не через bash](feedback_cowork_git_workflow.md) — bash sandbox блокирует .git modify, но Desktop Commander работает на real macOS с полными правами: можно делать git add/commit/push, rm/mv user files, запуск скриптов. Bash sandbox — только read.
+- [Длинные ответы — нумеровать секции](feedback_numbered_outputs.md) — иерархическая нумерация (1, 1.1, 2.1) чтобы Andriy ссылался номером на конкретный пункт
+- [Букет SO — компоненты НИКОГДА не по 0€](feedback_bouquet_component_pricing.md) — компоненты по своим ценам + общая скидка %; нулевые компоненты ломают аналитику маржи
+- [Тон с Andriy на мобильном — простой язык, не Odoo-жаргон](feedback_mobile_simple_language.md) — объясняй процесс «нажимаем Подтвердить → система резервирует на складе вот эти 25 роз», а не «confirm SO → picking assigned»
+- [Espafloria — модель доставки (нет своего курьера)](project_delivery_model.md) — Glovo on demand / такси / в будущем Вася; delivery.carrier модуль НЕ ставим; адрес в SO + Internal Note
+- [Espafloria Odoo partner IDs](project_odoo_partner_ids.md) — Verdnatura=42 (НЕ 23), Claude AI=56, букет=53. 23 — посторонняя запись, не использовать
+- [Reconcile action 1217 constraints](project_reconcile_action_constraints.md) — gate на review_status "OK" префиксе; не работает на state=purchase; safe_eval ограничения (write вместо attr); x_studio_paper_qty/unit на stock.move related из purchase_line_id
+- [Holded — только PDF, не источник истины](feedback_holded_role.md) — Holded API данные = бухгалтерский ввод, мог ошибиться. Закрытие pedido = сверка paper PDF (истина) + Odoo lines (мнение бухгалтера). Без PDF не закрывать.
+- [Все paper PDF подгрузить в pedido attachments](project_pdf_attachment_task.md) — для всех 173 Verdnatura pedidos нужен настоящий paper PDF в ir.attachment как audit trail
+- [Карта = один продукт, не сливать дорогую и дешёвую](feedback_card_distinct_codigos.md) — разные товары = разные карты = разные codigos; даже с похожими названиями
+- [×N inflation > 2 — проверять pack/stem перед paper-truth](feedback_pack_vs_stem_critical.md) — paper paq vs Odoo stems с matching ratio = Holded бухгалтер прав, не переписывать qty (поймал ошибку 12267946 SKIMMIA Yuki ×8: Odoo 40 stems = 5 paq × 8 stems/paq, был корректный recount, я неправильно применил paper qty=5)
