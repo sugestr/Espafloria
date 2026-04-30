@@ -1,51 +1,47 @@
-# Server action: 🤖 Claude AI Reconcile Finalize  (v6)
+# Server action: 🤖 Claude AI Reconcile Finalize  (v7)
 # id=1217, model=purchase.order, state=code, usage=base_automation
 # Triggered by base.automation 15 watching x_studio_claude_finalize=True on purchase.order
 # Filter: state in ('draft', 'purchase')
 #
-# v6 (2026-04-30):
-#   1. Added tracking_disable=True + mail_create_nolog=True + mail_notrack=True context
-#      on all stock.move / picking / pedido / line writes and button actions.
-#      Suppresses Odoo auto-tracking chatter ("Полученное количество обновлено" etc.)
-#      that otherwise posted under the MCP-trigger user (e.g. Andriy) — violation of the
-#      "author_id=56 на всех messages" rule (handover §2.6).
-#   2. Removed pedido-level success summary "✅ Claude finalize done." — owner verbatim
-#      2026-04-30: «зачем мы пишем в message вот это? мусорим. вся эта инфа есть в
-#      pedido.line комменте». All success-state info already lives in:
-#        - stock.move.x_studio_review_status / review_color (badges in UI)
-#        - purchase.order.line.x_studio_item_comment (per-line story)
-#        - mail.activity on pedido (created by supervisor for orange/red lines)
-#      Errors/warnings ("❌ ...", "⛔ ...") still post — they're conditional on issues.
+# v7 (2026-04-30):
+#   1. Phase A2 ВСЕГДА пишет quantity = expected_qty с tracking_disable (даже если совпадает с product_qty).
+#      Без этого button_validate сам делает write quantity = product_uom_qty без нашего context, триггерит auto-Odoo-tracking
+#      сообщения "Полученное количество обновлено" под user который запустил MCP (Andriy).
+#      Pilot 12186835 на v6 показал — даже с tracking_disable на picking, button_validate спамил chatter.
+#   2. Gate-check теперь по color (10/8/3/2 → pass; 1/4 → flag), не по startswith status text.
+#      Закрывает баг "auto-minor -0" на оранжевых строках (emoji-prefix '🟠 OK' ломал startswith('OK')
+#      из v5/v6 → soft-gate перезатирал статус 1146 на бессмысленный "OK (auto-minor -0)").
+#   3. Если delta=0 — НЕ пишем status (1146 уже выставила правильный 'OK' или '🟠 OK').
+#      delta>0 — текст без silly "-0" знака.
+#   4. Picking-done summary message в chatter (author_id=56) — восстановлен per owner 2026-04-30:
+#      «сводный отчёт хорошо. сводный итог имеет смысл сказать сообщением, и потом сообщение когда пикинг делаем».
+#      Формат: "✅ {picking_name} done. {N_lines} строк, paper {total}€ ↔ Odoo {total}€. {N_orange} substantial (см. activity)."
+#   5. Pack detection summary message — если Phase A2 нашёл pack lines, постится список перед validate.
+#      Формат: "📦 Phase A2: найдено N пачек: STATICE 5×8=40, ..."
+#
+# v6 (2026-04-30, retained):
+#   - tracking_disable + mail_create_nolog + mail_notrack на all writes (защита от auto-tracking)
+#   - removed pedido-level success summary "✅ Claude finalize done."
 #
 # Three branches:
 #   A) ROLLBACK PATH — note contains 'ROLLBACK_HOLDED_API'
-#      → for each done picking: open stock.return.picking wizard, set quantities, validate reverse picking
-#      → button_draft pedido
-#      → clear Phase A on lines (price=0, supplier_sku=False, supplier_product_name=False, item_comment=False)
-#      → clear note + flag
 #   B) RETRY PATH — state=='purchase'
-#      → for each pending picking, soft-gate (≤MINOR_THRESHOLD=5 stems auto-OK; pack with received_packs auto-OK 📦)
-#      → if any move >MINOR, flag stop; else validate (skip_backorder)
-#   C) DRAFT PATH
-#      → pre-flight (state==draft, has lines, amount>0, all lines have supplier_sku)
-#      → button_confirm
-#      → Phase A2: write x_studio_received_packs + quantity on stock.move
-#      → soft-gate
-#      → validate (skip_backorder)
+#   C) DRAFT PATH — state=='draft'
 #
-# All explicit chatter messages posted with author_id=56 (🤖 Claude AI Reconciliation partner).
+# All explicit chatter posts use author_id=56 (🤖 Claude AI Reconciliation).
 #
 # Mirror per [99_invariants §2] — keep in sync with prod ir.actions.server id=1217.
 #
 # safe_eval restrictions per [99_invariants §G4]:
-#   - No `obj.field = value` — must use `obj.write({'field': value})` (STORE_ATTR forbidden)
-#   - No `type(e).__name__` (`__name__` access forbidden)
-#   - No `hasattr` — use `'field_name' in record._fields`
+#   - No `obj.field = value` — use `obj.write({'field': value})`
+#   - No `type(e).__name__`, no `hasattr` — use `'field_name' in record._fields`
 
 UOM_PAQUETE_ID = 31
 MINOR_THRESHOLD = 5
 ROLLBACK_MARKER = 'ROLLBACK_HOLDED_API'
-CLAUDE_AUTHOR = 56  # res.partner id of "🤖 Claude AI Reconciliation"
+CLAUDE_AUTHOR = 56
+PASS_COLORS = (10, 8, 3, 2)  # green, dark blue, yellow, orange — gate passes
+BLOCK_COLORS = (1, 4)         # red, blue (legacy 'нужен ввод') — gate blocks
 
 for pedido in records:
     try:
@@ -55,7 +51,6 @@ for pedido in records:
             for picking in done_pickings:
                 try:
                     wizard = env['stock.return.picking'].with_context(active_id=picking.id, active_model='stock.picking', active_ids=[picking.id]).create({})
-                    # Set quantities on return lines from original move quantities (default is 0)
                     for return_line in wizard.product_return_moves:
                         if return_line.move_id:
                             return_line.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write({'quantity': return_line.move_id.quantity})
@@ -74,12 +69,7 @@ for pedido in records:
             except Exception as e2:
                 pedido.message_post(body="⚠️ button_draft failed: " + str(e2), author_id=CLAUDE_AUTHOR)
             for line in pedido.order_line:
-                line.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write({
-                    'price_unit': 0,
-                    'x_studio_supplier_sku': False,
-                    'x_studio_supplier_product_name': False,
-                    'x_studio_item_comment': False,
-                })
+                line.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write({'price_unit': 0, 'x_studio_supplier_sku': False, 'x_studio_supplier_product_name': False, 'x_studio_item_comment': False})
             pedido.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write({'note': False, 'x_studio_claude_finalize': False})
             pedido.message_post(body="✅ Claude rollback finished. State=" + pedido.state, author_id=CLAUDE_AUTHOR)
             continue
@@ -95,18 +85,23 @@ for pedido in records:
                 for move in picking.move_ids:
                     if move.state in ('done', 'cancel'):
                         continue
-                    status = move.x_studio_review_status or ''
-                    if status.startswith('OK'):
+                    color = move.x_studio_review_color or 0
+                    if color in PASS_COLORS:
                         continue
-                    if move.x_studio_received_packs and move.x_studio_received_packs > 0:
-                        move.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write({'x_studio_review_status': 'OK 📦 (auto-retry)'})
+                    if color in BLOCK_COLORS:
+                        flagged.append(move.product_id.display_name + ': color=' + str(color))
                         continue
+                    # color == 0 — fallback по qty delta
                     paper = move.product_uom_qty or 0
                     actual = move.quantity or 0
                     delta = abs(paper - actual)
-                    if delta <= MINOR_THRESHOLD:
+                    if delta == 0:
+                        continue
+                    elif delta <= MINOR_THRESHOLD:
                         sign = '+' if actual > paper else '-'
-                        move.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write({'x_studio_review_status': 'OK (auto-minor ' + sign + str(int(delta)) + ')'})
+                        new_status = 'OK (auto ' + sign + str(int(delta)) + ')'
+                        if move.x_studio_review_status != new_status:
+                            move.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write({'x_studio_review_status': new_status})
                     else:
                         flagged.append(move.product_id.display_name + ': дельта ' + str(int(actual-paper)) + ' стеблей')
             if flagged:
@@ -137,6 +132,9 @@ for pedido in records:
             pedido.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write({'x_studio_claude_finalize': False})
             continue
         pedido.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).button_confirm()
+        # ===== Phase A2: ALWAYS write quantity = expected_qty с tracking_disable =====
+        # (даже если совпадает с product_qty — иначе button_validate сам напишет и спам)
+        pack_lines_summary = []
         for picking in pedido.picking_ids:
             if picking.state == 'done':
                 continue
@@ -146,40 +144,81 @@ for pedido in records:
                     continue
                 vals = {}
                 if line.uom_id.id == UOM_PAQUETE_ID:
-                    vals['x_studio_received_packs'] = line.product_qty
-                    if line.x_studio_expected_qty:
-                        vals['quantity'] = line.x_studio_expected_qty
-                elif line.x_studio_expected_qty and abs(line.x_studio_expected_qty - line.product_qty) > 0.01:
-                    vals['quantity'] = line.x_studio_expected_qty
+                    # Pack: paper paq × stems_per_paq
+                    paq_count = line.product_qty
+                    stems = line.x_studio_expected_qty or paq_count
+                    vals['x_studio_received_packs'] = paq_count
+                    vals['quantity'] = stems
+                    avg = (stems / paq_count) if paq_count > 0 else 0
+                    pack_lines_summary.append(line.name + ': ' + str(int(paq_count)) + ' пак × ' + str(round(avg, 1)) + ' = ' + str(int(stems)) + ' шт')
+                else:
+                    # Stem: always write quantity = expected_qty (или product_qty fallback)
+                    target_qty = line.x_studio_expected_qty if line.x_studio_expected_qty else line.product_qty
+                    vals['quantity'] = target_qty
                 if vals:
                     move.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write(vals)
+        # Pack-detection summary message (если есть pack lines)
+        if pack_lines_summary:
+            pack_body = "<p>📦 <b>Phase A2 (pack detection)</b> — найдено " + str(len(pack_lines_summary)) + " пачек:</p><ul>"
+            for s in pack_lines_summary:
+                pack_body += "<li>" + s + "</li>"
+            pack_body += "</ul>"
+            pedido.message_post(body=pack_body, author_id=CLAUDE_AUTHOR)
+        # ===== Final gate (по color) =====
         flagged = []
+        orange_count = 0
         for picking in pedido.picking_ids:
             for move in picking.move_ids:
                 if move.state in ('done', 'cancel'):
                     continue
-                status = move.x_studio_review_status or ''
-                if status.startswith('OK'):
+                color = move.x_studio_review_color or 0
+                if color == 2:
+                    orange_count += 1
+                if color in PASS_COLORS:
                     continue
-                if move.x_studio_received_packs and move.x_studio_received_packs > 0:
-                    move.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write({'x_studio_review_status': 'OK 📦 (auto)'})
+                if color in BLOCK_COLORS:
+                    flagged.append(move.product_id.display_name + ': color=' + str(color))
                     continue
+                # color == 0 — fallback
                 paper = move.product_uom_qty or 0
                 actual = move.quantity or 0
                 delta = abs(paper - actual)
-                if delta <= MINOR_THRESHOLD:
+                if delta == 0:
+                    continue
+                elif delta <= MINOR_THRESHOLD:
                     sign = '+' if actual > paper else '-'
-                    move.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write({'x_studio_review_status': 'OK (auto-minor ' + sign + str(int(delta)) + ')'})
+                    new_status = 'OK (auto ' + sign + str(int(delta)) + ')'
+                    if move.x_studio_review_status != new_status:
+                        move.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write({'x_studio_review_status': new_status})
                 else:
                     flagged.append(move.product_id.display_name + ': дельта ' + str(int(actual-paper)) + ' стеблей')
         if flagged:
-            pedido.message_post(body="⛔ Claude finalize stopped at gate (" + str(len(flagged)) + " moves >MINOR): " + '; '.join(flagged), author_id=CLAUDE_AUTHOR)
+            pedido.message_post(body="⛔ Claude finalize stopped at gate (" + str(len(flagged)) + " moves blocked): " + '; '.join(flagged), author_id=CLAUDE_AUTHOR)
             pedido.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write({'x_studio_claude_finalize': False})
             continue
+        # ===== Validate pickings =====
+        validated_picks = []
         for picking in pedido.picking_ids:
             if picking.state == 'done':
                 continue
             picking.with_context(skip_backorder=True, tracking_disable=True, mail_create_nolog=True, mail_notrack=True).button_validate()
+            if picking.state == 'done':
+                validated_picks.append(picking.name)
+        # ===== Picking-done summary chatter =====
+        if validated_picks:
+            line_count = len(pedido.order_line)
+            pick_names = ', '.join(validated_picks)
+            wh_name = ''
+            if pedido.picking_type_id and pedido.picking_type_id.warehouse_id:
+                wh_name = pedido.picking_type_id.warehouse_id.name
+            done_body = "<p>✅ <b>" + pick_names + " done.</b> " + str(line_count) + " строк сверены, paper-truth применён."
+            done_body += " Сумма pedido: " + str(round(pedido.amount_total, 2)) + "€."
+            if wh_name:
+                done_body += " Warehouse: <b>" + wh_name + "</b>."
+            if orange_count > 0:
+                done_body += " " + str(orange_count) + " substantial (см. activity)."
+            done_body += "</p>"
+            pedido.message_post(body=done_body, author_id=CLAUDE_AUTHOR)
         pedido.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write({'x_studio_claude_finalize': False})
 
     except Exception as e:

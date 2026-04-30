@@ -1,4 +1,4 @@
-<!-- v: 6 | updated: 2026-04-30T16:30Z -->
+<!-- v: 7 | updated: 2026-04-30T17:30Z -->
 # Verdnatura reception algorithm — Espafloria 2026
 
 Жёсткий алгоритм приёмки albaranes Verdnatura для свежей сессии Claude. Subagents следуют без отклонений. Supervisor (Claude в свежей сессии) калибрует на pilot и обновляет с owner approve.
@@ -732,7 +732,49 @@ Pour traceability: один grep по chatter в Odoo даст все pedidos з
 
 ---
 
-## 16. Где смотреть всё в Odoo
+## 16. Warehouse / dirección entrega mapping (decision 2026-04-30)
+
+**Правило (owner verbatim 2026-04-30):** «если адрес доставки (локация) по бумаге отличается от записи в pedido — это важная проблема, но ты её не можешь решить — блокер, даже если все линии зелёные. Доводишь всё что можешь и оставляешь на блокере на решения меня».
+
+### 16.1 Mapping paper-адрес → warehouse (Espafloria 3 магазина + 1 archived)
+| Paper «Dirección de entrega» содержит | Warehouse | picking_type_id | Notes |
+|---|---|---|---|
+| **Olimpic** / **Castelldefels** | Blau (id=4) | 28 (BLA/IN/) | Магазин Blau, Castelldefels — пляжный |
+| **Augusta 109** / **Augusta 109 bis** | Plaza (id=2) | 10 (PLA/IN/) | Магазин Plaza, Barcelona, Via Augusta 109 (bis) |
+| **Gloria** / **Macinista** / **Diagonal** | Gloria (id=3) | 19 (GLO/IN/) | Магазин Gloria Macinista, Barcelona, Diagonal |
+| **Muntaner 260** | Temporal (id=5) **+ planned scrap** | 37 (TMP/IN/) | Закрытый ИП проданный магазин. Принять на Temporal, потом списать что не продалось до даты продажи. Архивирован, но используется для legacy 2026 albaranes. |
+| Прочее / пусто / неопределённое | flag → owner | — | Назначение на Andriy (id=2), пусть разберётся |
+
+### 16.2 Workflow проверки address при reception
+1. Парсю paper → извлекаю «Dirección de entrega» (раздел над «Datos fiscales»).
+2. Читаю Odoo `purchase.order.picking_type_id.warehouse_id` (текущий warehouse).
+3. Match:
+   - Paper address содержит ключевое слово из 16.1 → expected warehouse.
+   - Compare с current Odoo warehouse.
+4. Если match → продолжаю, тригерю 1217.
+5. Если **mismatch** → **БЛОКЕР**:
+   - Не тригерю 1217.
+   - Phase A на лайны можно сделать (это OK, не зависит от warehouse).
+   - Создаю activity для owner с pedido id + предложенным правильным warehouse.
+   - В chatter post: «🚧 Address mismatch: paper говорит {paper_addr} → ожидаю warehouse {expected}, текущий {current}. Жду owner для смены picking_type или подтверждения».
+6. Owner либо меняет picking_type через UI, либо подтверждает текущий → закрываю activity, тригерю 1217.
+
+### 16.3 Datos fiscales ≠ Dirección entrega
+**Не путать.** Verdnatura paper имеет два блока:
+- **Datos fiscales** — регистрация ESPAFLORIA SL (всегда «MUNTANER 260, B19776897»). Это НЕ адрес доставки.
+- **Dirección de entrega** — куда физически едут товары (Olimpic / Augusta / Gloria etc.). Это и есть наш target.
+
+При парсинге paper берём именно «Dirección de entrega», игнорируем «Datos fiscales».
+
+### 16.4 Multi-paper split (12439827-B/G/P)
+Один paper разнесён на 3 albaran с разными dirección entrega — каждый на свой магазин (Blau / Gloria / Plaza). Алгоритм 16.2 применяется per albaran отдельно. (См. handover §13.5 — особый кейс через supervisor + owner.)
+
+### 16.5 Retroactive check для уже закрытых pedidos
+Pilot 12187009 закрыт на Blau (BLA/IN/00060). Paper dirección «C. OLIMPIC Castelldefels» = Blau. **Match ✅** (подтверждено owner 11.1).
+
+---
+
+## 17. Где смотреть всё в Odoo
 
 После прохода 166 pedidos owner видит:
 - **Список pedidos** (фильтр Verdnatura 2026)
