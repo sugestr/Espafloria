@@ -1,7 +1,21 @@
-# Server action: 🤖 Claude AI Reconcile Finalize  (v5)
+# Server action: 🤖 Claude AI Reconcile Finalize  (v6)
 # id=1217, model=purchase.order, state=code, usage=base_automation
 # Triggered by base.automation 15 watching x_studio_claude_finalize=True on purchase.order
 # Filter: state in ('draft', 'purchase')
+#
+# v6 (2026-04-30):
+#   1. Added tracking_disable=True + mail_create_nolog=True + mail_notrack=True context
+#      on all stock.move / picking / pedido / line writes and button actions.
+#      Suppresses Odoo auto-tracking chatter ("Полученное количество обновлено" etc.)
+#      that otherwise posted under the MCP-trigger user (e.g. Andriy) — violation of the
+#      "author_id=56 на всех messages" rule (handover §2.6).
+#   2. Removed pedido-level success summary "✅ Claude finalize done." — owner verbatim
+#      2026-04-30: «зачем мы пишем в message вот это? мусорим. вся эта инфа есть в
+#      pedido.line комменте». All success-state info already lives in:
+#        - stock.move.x_studio_review_status / review_color (badges in UI)
+#        - purchase.order.line.x_studio_item_comment (per-line story)
+#        - mail.activity on pedido (created by supervisor for orange/red lines)
+#      Errors/warnings ("❌ ...", "⛔ ...") still post — they're conditional on issues.
 #
 # Three branches:
 #   A) ROLLBACK PATH — note contains 'ROLLBACK_HOLDED_API'
@@ -19,7 +33,7 @@
 #      → soft-gate
 #      → validate (skip_backorder)
 #
-# All chatter messages posted with author_id=56 (🤖 Claude AI Reconciliation partner)
+# All explicit chatter messages posted with author_id=56 (🤖 Claude AI Reconciliation partner).
 #
 # Mirror per [99_invariants §2] — keep in sync with prod ir.actions.server id=1217.
 #
@@ -44,29 +58,29 @@ for pedido in records:
                     # Set quantities on return lines from original move quantities (default is 0)
                     for return_line in wizard.product_return_moves:
                         if return_line.move_id:
-                            return_line.write({'quantity': return_line.move_id.quantity})
+                            return_line.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write({'quantity': return_line.move_id.quantity})
                     return_action = wizard.action_create_returns()
                     new_pid = return_action.get('res_id') if isinstance(return_action, dict) else None
                     if new_pid:
                         new_picking = env['stock.picking'].browse(new_pid)
                         for m in new_picking.move_ids:
-                            m.write({'quantity': m.product_uom_qty})
-                        new_picking.with_context(skip_backorder=True).button_validate()
+                            m.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write({'quantity': m.product_uom_qty})
+                        new_picking.with_context(skip_backorder=True, tracking_disable=True, mail_create_nolog=True, mail_notrack=True).button_validate()
                         pedido.message_post(body="✅ reverse picking " + new_picking.name + " validated", author_id=CLAUDE_AUTHOR)
                 except Exception as ep:
                     pedido.message_post(body="❌ rollback picking error: " + str(ep), author_id=CLAUDE_AUTHOR)
             try:
-                pedido.button_draft()
+                pedido.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).button_draft()
             except Exception as e2:
                 pedido.message_post(body="⚠️ button_draft failed: " + str(e2), author_id=CLAUDE_AUTHOR)
             for line in pedido.order_line:
-                line.write({
+                line.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write({
                     'price_unit': 0,
                     'x_studio_supplier_sku': False,
                     'x_studio_supplier_product_name': False,
                     'x_studio_item_comment': False,
                 })
-            pedido.write({'note': False, 'x_studio_claude_finalize': False})
+            pedido.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write({'note': False, 'x_studio_claude_finalize': False})
             pedido.message_post(body="✅ Claude rollback finished. State=" + pedido.state, author_id=CLAUDE_AUTHOR)
             continue
 
@@ -74,8 +88,7 @@ for pedido in records:
         if pedido.state == 'purchase':
             pending = pedido.picking_ids.filtered(lambda p: p.state not in ('done', 'cancel'))
             if not pending:
-                pedido.message_post(body="ℹ️ Claude finalize: state=purchase, все pickings done.", author_id=CLAUDE_AUTHOR)
-                pedido.write({'x_studio_claude_finalize': False})
+                pedido.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write({'x_studio_claude_finalize': False})
                 continue
             flagged = []
             for picking in pending:
@@ -86,45 +99,44 @@ for pedido in records:
                     if status.startswith('OK'):
                         continue
                     if move.x_studio_received_packs and move.x_studio_received_packs > 0:
-                        move.write({'x_studio_review_status': 'OK 📦 (auto-retry)'})
+                        move.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write({'x_studio_review_status': 'OK 📦 (auto-retry)'})
                         continue
                     paper = move.product_uom_qty or 0
                     actual = move.quantity or 0
                     delta = abs(paper - actual)
                     if delta <= MINOR_THRESHOLD:
                         sign = '+' if actual > paper else '-'
-                        move.write({'x_studio_review_status': 'OK (auto-minor ' + sign + str(int(delta)) + ')'})
+                        move.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write({'x_studio_review_status': 'OK (auto-minor ' + sign + str(int(delta)) + ')'})
                     else:
                         flagged.append(move.product_id.display_name + ': дельта ' + str(int(actual-paper)) + ' стеблей')
             if flagged:
                 pedido.message_post(body="⛔ Claude validate retry stopped (" + str(len(flagged)) + " moves >MINOR): " + '; '.join(flagged), author_id=CLAUDE_AUTHOR)
-                pedido.write({'x_studio_claude_finalize': False})
+                pedido.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write({'x_studio_claude_finalize': False})
                 continue
             for picking in pending:
-                picking.with_context(skip_backorder=True).button_validate()
-            pedido.write({'x_studio_claude_finalize': False})
-            pedido.message_post(body="✅ Claude validate retry done: " + str(len(pending)) + " picking validated.", author_id=CLAUDE_AUTHOR)
+                picking.with_context(skip_backorder=True, tracking_disable=True, mail_create_nolog=True, mail_notrack=True).button_validate()
+            pedido.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write({'x_studio_claude_finalize': False})
             continue
 
         # ===== C) DRAFT PATH =====
         if pedido.state != 'draft':
             pedido.message_post(body="⛔ Claude finalize skipped: state=" + str(pedido.state), author_id=CLAUDE_AUTHOR)
-            pedido.write({'x_studio_claude_finalize': False})
+            pedido.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write({'x_studio_claude_finalize': False})
             continue
         if not pedido.order_line:
             pedido.message_post(body="⛔ Claude finalize skipped: no order_line", author_id=CLAUDE_AUTHOR)
-            pedido.write({'x_studio_claude_finalize': False})
+            pedido.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write({'x_studio_claude_finalize': False})
             continue
         if pedido.amount_total <= 0:
             pedido.message_post(body="⛔ Claude finalize skipped: amount_total=0", author_id=CLAUDE_AUTHOR)
-            pedido.write({'x_studio_claude_finalize': False})
+            pedido.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write({'x_studio_claude_finalize': False})
             continue
         unfilled = pedido.order_line.filtered(lambda l: not l.x_studio_supplier_sku)
         if unfilled:
             pedido.message_post(body="⛔ Claude finalize skipped: " + str(len(unfilled)) + " lines without supplier_sku", author_id=CLAUDE_AUTHOR)
-            pedido.write({'x_studio_claude_finalize': False})
+            pedido.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write({'x_studio_claude_finalize': False})
             continue
-        pedido.button_confirm()
+        pedido.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).button_confirm()
         for picking in pedido.picking_ids:
             if picking.state == 'done':
                 continue
@@ -140,7 +152,7 @@ for pedido in records:
                 elif line.x_studio_expected_qty and abs(line.x_studio_expected_qty - line.product_qty) > 0.01:
                     vals['quantity'] = line.x_studio_expected_qty
                 if vals:
-                    move.write(vals)
+                    move.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write(vals)
         flagged = []
         for picking in pedido.picking_ids:
             for move in picking.move_ids:
@@ -150,27 +162,26 @@ for pedido in records:
                 if status.startswith('OK'):
                     continue
                 if move.x_studio_received_packs and move.x_studio_received_packs > 0:
-                    move.write({'x_studio_review_status': 'OK 📦 (auto)'})
+                    move.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write({'x_studio_review_status': 'OK 📦 (auto)'})
                     continue
                 paper = move.product_uom_qty or 0
                 actual = move.quantity or 0
                 delta = abs(paper - actual)
                 if delta <= MINOR_THRESHOLD:
                     sign = '+' if actual > paper else '-'
-                    move.write({'x_studio_review_status': 'OK (auto-minor ' + sign + str(int(delta)) + ')'})
+                    move.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write({'x_studio_review_status': 'OK (auto-minor ' + sign + str(int(delta)) + ')'})
                 else:
                     flagged.append(move.product_id.display_name + ': дельта ' + str(int(actual-paper)) + ' стеблей')
         if flagged:
             pedido.message_post(body="⛔ Claude finalize stopped at gate (" + str(len(flagged)) + " moves >MINOR): " + '; '.join(flagged), author_id=CLAUDE_AUTHOR)
-            pedido.write({'x_studio_claude_finalize': False})
+            pedido.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write({'x_studio_claude_finalize': False})
             continue
         for picking in pedido.picking_ids:
             if picking.state == 'done':
                 continue
-            picking.with_context(skip_backorder=True).button_validate()
-        pedido.write({'x_studio_claude_finalize': False})
-        pedido.message_post(body="✅ Claude finalize done.", author_id=CLAUDE_AUTHOR)
+            picking.with_context(skip_backorder=True, tracking_disable=True, mail_create_nolog=True, mail_notrack=True).button_validate()
+        pedido.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write({'x_studio_claude_finalize': False})
 
     except Exception as e:
         pedido.message_post(body="❌ Claude finalize ERROR: " + str(e), author_id=CLAUDE_AUTHOR)
-        pedido.write({'x_studio_claude_finalize': False})
+        pedido.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write({'x_studio_claude_finalize': False})

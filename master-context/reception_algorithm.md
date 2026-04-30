@@ -1,4 +1,4 @@
-<!-- v: 4 | updated: 2026-04-30T01:50Z -->
+<!-- v: 6 | updated: 2026-04-30T16:30Z -->
 # Verdnatura reception algorithm — Espafloria 2026
 
 Жёсткий алгоритм приёмки albaranes Verdnatura для свежей сессии Claude. Subagents следуют без отклонений. Supervisor (Claude в свежей сессии) калибрует на pilot и обновляет с owner approve.
@@ -119,6 +119,20 @@ pdftotext -layout /path/to/verdnatura_<docNum>.pdf -
 - Wrong card с разной ценой (×1.5+) → reassign / split (substantial fix → 🟠).
 - Карта-placeholder (`⛔НОВЫЙ ТОВАР`) → search existing → reassign or create new.
 
+#### 4.1.1 MIX-карта — когда допустимо держать N variety на одной
+**Правило (owner verbatim 2026-04-30 на pilot 12187009):** «MIX для орхидей если цена закупки более менее похожа (были эксклюзивные орхидеи тоже у нас)».
+
+Допустимо держать N разных variety на одной MIX-карте (название содержит «MIX» / «OTHER» / generic family wording) **если** цены закупки variants близкие — `max(prices) / min(prices) ≤ 1.5`.
+
+**Эксклюзивные premium variants** (цена ×1.5+ от средней по MIX) → distinct card обязательна (memory `feedback_card_distinct_codigos.md` priority).
+
+**Примеры:**
+- PHAL Cascade Rosa 8.22€, PHAL Mini 7.90€, PHAL Eleg 8.09€ → ratio 1.04, **OK на одной MIX-карте**.
+- Monstera Adansonii 4.28€, Monstera Variegata Thai 29.10€ → ratio 6.8, **distinct cards обязательно**.
+- Plantamix Pastel 8.74€, Plantamix Specialties 9.93€ → ratio 1.14, **OK на одной MIX-карте**.
+
+При reassign на MIX-карту (когда identity match явный, цена близкая) → **🟠 orange** (substantial card change).
+
 ### 4.2 Количество (с учётом pack/stem)
 
 #### Pack/stem detection signals (детектирую перед quantity decision)
@@ -171,9 +185,25 @@ pdftotext -layout /path/to/verdnatura_<docNum>.pdf -
 - Если Odoo line имеет другой tax → переписать.
 
 ### 4.5 Цена
-- `price_unit` = paper PVP per uom.
-- Если совпадает (≤0.01€ delta) → no action.
-- Иначе → update + лог.
+**Paper price ВСЕГДА wins.** При сверке Verdnatura pedidos `purchase.order.line.price_unit` всегда выставляется = paper PVP, **без сравнения** с текущей Odoo ценой. Holded import цены — не источник истины.
+
+**Why (decision 2026-04-30):** owner verbatim на pilot 12187009: «а мы по сути всегда с бумаги будем брать цену потому что Holded albaran цена не верна, скорее всего ноль или средняя закупочная там стоит случайно». Бухгалтер в Holded мог поставить 0 (placeholder), среднюю закупочную из истории, или не дозаполнить. Бумага = единственная актуальная цена дня поставки. Pilot 12187009 confirmed: 8 lines имели Odoo price ≠ paper, все автоматически перезаписаны → +169.97€ от 466.17€ к 636.14€ (paper Total).
+
+**How to apply:**
+- В Phase A на `purchase.order.line` — всегда `write({'price_unit': paper.PVP})` без проверки delta.
+- Если paper PVP = 0 (редкий случай) → flag для owner, не записывать как-есть.
+- Не относится к sale.order — там цена с pricelist.
+
+### 4.6 Line.name синхронизация (decision 2026-04-30)
+После Phase A — **всегда** проверить `line.name` на формат `[<paper.ref>] <paper.concepto>`:
+- Если ref в скобках в name **НЕ совпадает** с `paper.ref` (бухгалтер использовал старый/чужой Verdnatura ref в name) → переписать на правильный.
+- Если name был **пустым** или name = автогенерированный default по карточке (типа `[8400991] 🚫 SANSIVIERIA placeholder`) → переписать на `[paper.ref] paper.concepto`.
+- Если карта была reassigned (§4.1 wrong card → reassign / split) → name переписывается обязательно (это уже было в §5.6).
+- Если ref OK но concepto в name немного короче / отличается косметически (truncated, minor diff) → оставить (cosmetic, не trogai).
+
+**Это считается substantial fix (🟠 orange)** — бот переписывает структурное текстовое поле бухгалтера. В `item_comment` лог: `🟠 ref/name: [<old>] → [<new>]`.
+
+**Why:** owner на форме pedido видит `[ref] concepto` непосредственно в строке. Если там стейл-ref (например `[196920]` от старой партии когда paper говорит `[165850]`) или wrong concepto — confusion при ручном review. Должен быть один консистентный код везде. Owner verbatim 2026-04-30: «2.3.a да логично и впредь».
 
 ---
 
@@ -185,6 +215,18 @@ pdftotext -layout /path/to/verdnatura_<docNum>.pdf -
 2. Wrong card с большой разницей в цене (×1.5+) — split MIX на distinct.
 
 **Default**: использовать существующую карту (даже MIX) если разумно. Не плодить.
+
+#### 5.1.1 Перед create — проверить existing robo-cards (decision 2026-04-30)
+**Обязательный шаг перед create новой карточки:** search existing robo-cards (карточки сделанные ботом / прошлой migration v2.2) — могут уже покрывать identity:
+- Префиксы name: `🤖🚧` / `🚧🟠` / `🚧` / `🤖`
+- Диапазоны default_code: 84001152-84001170 (мои текущие 19), 84009xxx (migration v2.2 robo-cards), любые новые robo ranges (см. 5.4).
+- Категории: 207 «⛔ Карантин Holded» + подкатегории (210/211/212/213/214/280/281).
+
+Если найдена существующая robo-card точно по identity (узкий species match, не широкий family) → **reassign на неё**, не плодить дубль. Это substantial fix → 🟠.
+
+Только если ни в чистой зоне (рукотворные Holded), ни среди existing robo-cards нет — create new.
+
+**Owner verbatim 2026-04-30 (pilot 12187009):** «2.5.a — не надо новых карт» (если existing robo-card покрывает identity). Пример: Monstera Variegata Thai Constellation уже есть как 84009001 от migration v2.2 — reassign, не дублировать.
 
 ### 5.2 Местоположение — карантин (default)
 Категория id=207 «⛔ Карантин Holded» с подкатегориями:
@@ -213,11 +255,38 @@ pdftotext -layout /path/to/verdnatura_<docNum>.pdf -
 | image_1920 | `set_binary_field` с `https://cdn.verdnatura.es/image/catalog/1600x900/<paper.ref>`. **404 fallback**: try-catch вокруг set_binary_field, если 404 → leave empty (no error raise), записать в `description_purchase` строку «no image: Verdnatura CDN 404» |
 | purchase_method | `'receive'` |
 
-### 5.4 SKU sequential
+### 5.3.1 Barcode rule (decision 2026-04-30)
+**Цветы (FLORES CORTADAS, ROSA UNIFLORA):** `barcode = default_code` строго. SKU и barcode должны совпадать.
+
+**Твёрдые товары (DECORACION, EMBALAJE, JARRONES):** разрешено `barcode = manufacturer barcode` (отличается от default_code) — баркод от производителя на упаковке.
+
+**Горшечные растения (PLANTAS EN MACETAS):** обычно `barcode = default_code`, но **иногда** можно manufacturer barcode (если на горшке/упаковке есть штрих-код).
+
+При **создании** robo-card → всегда заполнять оба поля одновременно. При **rename** SKU → переименовать и barcode тоже (если они были синхронизированы; если barcode был от производителя — оставить).
+
+**Why:** owner verbatim 2026-04-30 на pilot 12187009: «при фиксе робо-карт SKU и barcode должны быть синхронизированы — ты забыл про barcode как минимум в одной карточке». Затем уточнил scope: «все товары которые мы заводим по своим карточкам имеют уникальный SKU и он совпадает с баркодом для цветов — точно. Барcоды твёрдых и иногда горшечки можем использовать производителя».
+
+**Pilot 12187009 fix:** 21 robo-card barcode синхронизирован с default_code (84001147, 84001148, 84001152-84001170, 84001171). 6 collision-templates 84001149/150/151 (по 2 template на каждый SKU от migration v2.2 bug) — отложены, нужен отдельный rename в свободные слоты.
+
+### 5.4 SKU sequential — **continuous через robo + manual без gaps**
+**Правило (decision 2026-04-30):** robo-cards идут sequential **сразу после max manual Holded SKU**, без gaps. Не плодить отдельные диапазоны (84009* был outlier, сейчас merged в 84001*).
+
 ```
-search product.template default_code =ilike '84001%' order desc limit 1
+# Find next SKU
+max_code = search product.template default_code =like '84001%' order desc limit 1 (только 8-digit, отфильтровать 7-digit)
 → extract NNN, +1
 ```
+
+**Текущее состояние 2026-04-30:**
+- 84001000-84001146 — robo от migration v2.0 (147 cards, 🚫)
+- 84001147-84001151 — robo от migration v2.2 (5 cards 🤖🚧, 3 collision-pairs)
+- 84001152-84001170 — мои pilot cards (19, 🚧🟠)
+- 84001171 — Monstera Variegata Thai (renumbered с 84009001)
+- **next free: 84001172**
+
+При create — обязательно: `default_code = next_sku`, `barcode = next_sku` (для цветов и в общем случае).
+
+**Owner verbatim:** «в Holded там нумерация была порядковая и удобрная, чтобы не плодить SKU интервалы странные». Цель — один сплошной поток.
 
 ### 5.5 supplierinfo (Vendor Price)
 | Поле | Значение |
@@ -297,6 +366,35 @@ Picking в state='assigned'. Pedido в 'draft'. Chatter post: `🟠 gate stopped
 ### 6.6 Backorder
 `skip_backorder=True` — никогда не создаём backorder.
 
+### 6.7 Gate-check логика (decision 2026-04-30, для v7)
+**Старая (v5/v6) логика:** `if status.startswith('OK'): continue` — баг: emoji-prefix `🟠 OK` от action 1146 ломает startswith → gate перезатирает status на «OK (auto-minor -0)» (бессмысленный текст когда delta=0). Pilot 12187009 показал — на 3 оранжевых строках получили «-0», на 9 зелёных всё ОК.
+
+**Новая (v7) логика — по color, не по тексту:**
+```python
+color = move.x_studio_review_color or 0
+if color in (10, 8, 3, 2):    # green / dark blue / yellow / orange — все pass
+    continue
+elif color == 1:               # red — block, нужен owner
+    flagged.append(...)
+elif color == 4:               # blue — нужен ввод флориста
+    flagged.append(...)
+else:                          # color == 0 (нет computed) — fallback по qty delta
+    paper = move.product_uom_qty or 0
+    actual = move.quantity or 0
+    delta = abs(paper - actual)
+    if delta == 0:
+        continue                # точное совпадение — let 1146 handle status
+    elif delta <= MINOR_THRESHOLD:
+        sign = '+' if actual > paper else '-'
+        new_status = 'OK (auto ' + sign + str(int(delta)) + ')'
+        if move.x_studio_review_status != new_status:
+            move.with_context(...).write({'x_studio_review_status': new_status})
+    else:
+        flagged.append(...)
+```
+
+**Status text без `-0`:** delta=0 → не пишем status (1146 уже выставил). delta>0 → текст без silly «-0».
+
 ---
 
 ## 7. Acceptance criteria (когда pedido «качественно» закрыт)
@@ -344,7 +442,52 @@ Picking в state='assigned'. Pedido в 'draft'. Chatter post: `🟠 gate stopped
 - 🟠 оранжевый: «проверь — substantial auto-fix» (валидация)
 - ❌ красный: «нужно решение» (owner даёт ответ → закрываю)
 
+**Поля mail.activity (Odoo 19):**
+- `res_model_id` (m2o → ir.model) — НЕ `res_model` (char). Для `purchase.order` нужен ir.model id (текущий = 819).
+- `res_id` (int)
+- `activity_type_id` — id=4 «To-Do» по умолчанию
+- `user_id` — id=2 (Andriy) для owner review
+
 **Closure правило** (минор 3.3): когда owner отвечает в чате pedido либо отмечает activity как done — supervisor mark activity `state='done'`, чтобы review queue не накапливался мусором. Pedido может получить новую activity при последующей правке.
+
+### 8.5 Chatter rules (decision 2026-04-30) — **только на 2 ключевых событиях**
+**Pedido chatter (mail.message)** — только сводные структурные сообщения на двух business events:
+
+1. **Pack/stem detection** (после Phase A2, если есть pack lines) — список вида:
+```
+📦 Phase A2 (pack detection): найдено 3 пачки
+• STATICE (ref 12345): 5 паков × 8 стеблей = 40 шт
+• EUC (ref 67890): 2 пачки × 10 стеблей = 20 шт
+```
+
+2. **Picking validate** (после button_validate) — сводка:
+```
+✅ BLA/IN/00060 done. 12 строк сверены, paper 636.14€ ↔ Odoo 636.14€.
+3 substantial фикса (см. activity).
+```
+
+3. **Errors / warnings** — `⛔ Claude finalize stopped (>MINOR): ...`, `❌ ERROR: ...` — условные, только при проблемах.
+
+**НЕ постить в chatter:**
+- Per-line price/sku/name updates — это в `purchase.order.line.x_studio_item_comment` (видно на форме строки).
+- Auto-tracking «Полученное количество обновлено», «Цена изменена» — отключены через `with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True)` в action 1217 v6+.
+- Generic «✅ Claude finalize done.» без деталей — был в v5, удалён в v6.
+
+**Why:** owner verbatim 2026-04-30: «зачем мы пишем в message вот это? мусорим. вся эта инфа есть в pedido.line комменте». Затем: «там в логи разве что имеет смысл отмечать нашли пачки сделали то-то или ожидали 25 штук реально 22 штуки... сводный отчет хорошо. на этапе распознавания пачек и штук сводный итог имеет смысл, и потом сообщение когда пикинг делаем».
+
+Все message_post — `author_id=56` (Claude AI Reconciliation partner).
+
+### 8.6 Auto-tracking suppression (action 1217 v6+)
+**Все writes/buttons под bot context должны быть с `tracking_disable=True, mail_create_nolog=True, mail_notrack=True`.**
+
+```python
+move.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write({...})
+picking.with_context(skip_backorder=True, tracking_disable=True, mail_create_nolog=True, mail_notrack=True).button_validate()
+```
+
+**Why:** иначе Odoo auto-tracking создаёт mail.message «Полученное количество обновлено» под user'ом который запустил MCP-вызов (Andriy) — нарушение правила «author_id=56 на всех messages». На pilot 12187009 было 5 таких auto-сообщений от Andriy на picking. v6 закрыл это.
+
+**Caveat:** MCP writes напрямую на `purchase.order.line` (не через action 1217) всё ещё могут триггерить auto-tracking под Andriy для tracked-полей (price_unit, name, product_id). Долгосрочный fix — bot res.users + отдельный MCP API key (out of scope). Промежуточный — переносить Phase A на лайны внутрь action 1217 (запланировано).
 
 ---
 
