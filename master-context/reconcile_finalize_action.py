@@ -1,10 +1,10 @@
-# Server action: 🤖 Claude AI Reconcile Finalize  (v7.2)
-# v7.2 (2026-04-30):
-#   1. Детальный summary chatter message: список всех 🟠 (substantial fixes) и счёт ✅ green/🟡 yellow.
-#      Читает purchase.order.line.x_studio_item_comment (1-я строка = human readable),
-#      собирает по эмоджи 🟠 / 🟡 / ✅ из comment.
-#   2. Auto-create mail.activity для owner (user_id=2) если есть orange/yellow/red lines.
-#      Idempotent — skip create если уже есть activity 'substantial' на этом pedido.
+# Server action: 🤖 Claude AI Reconcile Finalize  (v7.3)
+# v7.3 (2026-04-30):
+#   1. Body summary использует <br/> вместо \n для line breaks (Odoo HTML view не рендерит \n).
+#   2. env.cr.flush() ПЕРЕД pedido.message_post(summary) — flushes pending Odoo auto-tracking
+#      messages from button_validate FIRST, чтобы Claude summary имел БОЛЬШИЙ id и появлялся
+#      первым в chatter (newest top, под Activities).
+# v7.2: детальный summary chatter (с list orange/yellow/green) + auto-create mail.activity
 # v7.1: plain text summary (HTML escape fix)
 # v7: Phase A2 always writes quantity + gate-by-color + summaries
 # v6: tracking_disable + remove generic "✅ done"
@@ -123,9 +123,9 @@ for pedido in records:
                 if vals:
                     move.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write(vals)
         if pack_lines_summary:
-            pack_body = "📦 Phase A2 (pack detection) — найдено " + str(len(pack_lines_summary)) + " пачек:\n"
+            pack_body = "📦 Phase A2 (pack detection) — найдено " + str(len(pack_lines_summary)) + " пачек:<br/>"
             for s in pack_lines_summary:
-                pack_body += "• " + s + "\n"
+                pack_body += "• " + s + "<br/>"
             pedido.message_post(body=pack_body, author_id=CLAUDE_AUTHOR)
         flagged = []
         orange_count = 0
@@ -186,19 +186,21 @@ for pedido in records:
                     yellow_count += 1
                 elif '✅' in comment:
                     green_count += 1
-            done_body = "✅ " + pick_names + " done. " + str(line_count) + " строк сверены, paper-truth применён.\n"
+            done_body = "✅ " + pick_names + " done. " + str(line_count) + " строк сверены, paper-truth применён.<br/>"
             done_body += "Сумма pedido: " + str(round(pedido.amount_total, 2)) + "€."
             if wh_name:
                 done_body += " Warehouse: " + wh_name + "."
-            done_body += "\n\n"
+            done_body += "<br/><br/>"
             if orange_lines_list:
-                done_body += "🟠 " + str(len(orange_lines_list)) + " substantial fixes:\n"
+                done_body += "🟠 " + str(len(orange_lines_list)) + " substantial fixes:<br/>"
                 for ol in orange_lines_list:
-                    done_body += ol + "\n"
-                done_body += "\n"
+                    done_body += ol + "<br/>"
+                done_body += "<br/>"
             if yellow_count > 0:
-                done_body += "🟡 " + str(yellow_count) + " minor fixes\n"
+                done_body += "🟡 " + str(yellow_count) + " minor fixes<br/>"
             done_body += "✅ " + str(green_count) + " green: clean paper-match"
+            # Flush pending Odoo tracking messages so Claude summary gets HIGHER id (newest top)
+            env.cr.flush()
             pedido.message_post(body=done_body, author_id=CLAUDE_AUTHOR)
             # ===== Auto-create activity if orange/yellow/red present =====
             if orange_lines_list or yellow_count > 0:
