@@ -1,4 +1,9 @@
-# Server action: 🤖 Claude AI Reconcile Finalize  (v7.7)
+# Server action: 🤖 Claude AI Reconcile Finalize  (v7.8)
+# v7.8 (2026-05-01): zero-backorder fix для pack lines + auto-cancel-delete backorder если возник.
+#                    Phase A2 для pack (uom_id=31) теперь пишет product_uom_id=1 (Tallo) +
+#                    product_uom_qty=stems → Odoo не пересчитывает по 1:10 → backorder не создаётся.
+#                    После button_validate проходим по picking_ids, ищем orphan backorder
+#                    (backorder_id != False, state != done) → action_cancel() + unlink().
 # v7.7 (2026-04-30): УПРОЩЕНИЕ — summary message + activity убраны из action 1217.
 #                    Subagent сам постит summary + creates activity через MCP create_record
 #                    после своего trigger/verify. Это работает (pilot 1-5 confirmed) — direct
@@ -119,6 +124,10 @@ for pedido in records:
                     paq_count = line.product_qty
                     stems = line.x_studio_expected_qty or paq_count
                     vals['x_studio_received_packs'] = paq_count
+                    # zero-backorder v7.8: switch move uom to Tallo + qty in stems
+                    # so Odoo expected = received = stems → no backorder
+                    vals['product_uom'] = 1  # Tallo (line stays Paquete, only move uom switched)
+                    vals['product_uom_qty'] = stems
                     vals['quantity'] = stems
                     avg = (stems / paq_count) if paq_count > 0 else 0
                     pack_lines_summary.append(line.name + ': ' + str(int(paq_count)) + ' пак × ' + str(round(avg, 1)) + ' = ' + str(int(stems)) + ' шт')
@@ -165,8 +174,16 @@ for pedido in records:
             picking.with_context(skip_backorder=True, tracking_disable=True, mail_create_nolog=True, mail_notrack=True).button_validate()
             if picking.state == 'done':
                 validated_picks.append(picking.name)
+        # v7.8: cleanup orphan backorder pickings (если zero-backorder gate всё-таки failed)
+        # owner override 82.51: cancel + unlink, не оставлять мусором
+        for picking in pedido.picking_ids:
+            if picking.backorder_id and picking.state not in ('done', 'cancel'):
+                try:
+                    picking.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).action_cancel()
+                    picking.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).unlink()
+                except Exception as eb:
+                    pedido.message_post(body="⚠️ backorder cleanup failed " + picking.name + ": " + str(eb), author_id=CLAUDE_AUTHOR)
         # Picking-done summary message + activity — subagent делает сам после verify
-        # (см. reception_algorithm §8.5). Action 1217 v7.7 завершает только trigger/validate.
         pedido.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write({'x_studio_claude_finalize': False})
 
     except Exception as e:
