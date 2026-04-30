@@ -1,51 +1,23 @@
-# Server action: 🤖 Claude AI Reconcile Finalize  (v7)
-# id=1217, model=purchase.order, state=code, usage=base_automation
-# Triggered by base.automation 15 watching x_studio_claude_finalize=True on purchase.order
-# Filter: state in ('draft', 'purchase')
-#
-# v7 (2026-04-30):
-#   1. Phase A2 ВСЕГДА пишет quantity = expected_qty с tracking_disable (даже если совпадает с product_qty).
-#      Без этого button_validate сам делает write quantity = product_uom_qty без нашего context, триггерит auto-Odoo-tracking
-#      сообщения "Полученное количество обновлено" под user который запустил MCP (Andriy).
-#      Pilot 12186835 на v6 показал — даже с tracking_disable на picking, button_validate спамил chatter.
-#   2. Gate-check теперь по color (10/8/3/2 → pass; 1/4 → flag), не по startswith status text.
-#      Закрывает баг "auto-minor -0" на оранжевых строках (emoji-prefix '🟠 OK' ломал startswith('OK')
-#      из v5/v6 → soft-gate перезатирал статус 1146 на бессмысленный "OK (auto-minor -0)").
-#   3. Если delta=0 — НЕ пишем status (1146 уже выставила правильный 'OK' или '🟠 OK').
-#      delta>0 — текст без silly "-0" знака.
-#   4. Picking-done summary message в chatter (author_id=56) — восстановлен per owner 2026-04-30:
-#      «сводный отчёт хорошо. сводный итог имеет смысл сказать сообщением, и потом сообщение когда пикинг делаем».
-#      Формат: "✅ {picking_name} done. {N_lines} строк, paper {total}€ ↔ Odoo {total}€. {N_orange} substantial (см. activity)."
-#   5. Pack detection summary message — если Phase A2 нашёл pack lines, постится список перед validate.
-#      Формат: "📦 Phase A2: найдено N пачек: STATICE 5×8=40, ..."
-#
-# v6 (2026-04-30, retained):
-#   - tracking_disable + mail_create_nolog + mail_notrack на all writes (защита от auto-tracking)
-#   - removed pedido-level success summary "✅ Claude finalize done."
-#
-# Three branches:
-#   A) ROLLBACK PATH — note contains 'ROLLBACK_HOLDED_API'
-#   B) RETRY PATH — state=='purchase'
-#   C) DRAFT PATH — state=='draft'
-#
-# All explicit chatter posts use author_id=56 (🤖 Claude AI Reconciliation).
-#
-# Mirror per [99_invariants §2] — keep in sync with prod ir.actions.server id=1217.
-#
-# safe_eval restrictions per [99_invariants §G4]:
-#   - No `obj.field = value` — use `obj.write({'field': value})`
-#   - No `type(e).__name__`, no `hasattr` — use `'field_name' in record._fields`
+# Server action: 🤖 Claude AI Reconcile Finalize  (v7.2)
+# v7.2 (2026-04-30):
+#   1. Детальный summary chatter message: список всех 🟠 (substantial fixes) и счёт ✅ green/🟡 yellow.
+#      Читает purchase.order.line.x_studio_item_comment (1-я строка = human readable),
+#      собирает по эмоджи 🟠 / 🟡 / ✅ из comment.
+#   2. Auto-create mail.activity для owner (user_id=2) если есть orange/yellow/red lines.
+#      Idempotent — skip create если уже есть activity 'substantial' на этом pedido.
+# v7.1: plain text summary (HTML escape fix)
+# v7: Phase A2 always writes quantity + gate-by-color + summaries
+# v6: tracking_disable + remove generic "✅ done"
 
 UOM_PAQUETE_ID = 31
 MINOR_THRESHOLD = 5
 ROLLBACK_MARKER = 'ROLLBACK_HOLDED_API'
 CLAUDE_AUTHOR = 56
-PASS_COLORS = (10, 8, 3, 2)  # green, dark blue, yellow, orange — gate passes
-BLOCK_COLORS = (1, 4)         # red, blue (legacy 'нужен ввод') — gate blocks
+PASS_COLORS = (10, 8, 3, 2)
+BLOCK_COLORS = (1, 4)
 
 for pedido in records:
     try:
-        # ===== A) ROLLBACK PATH =====
         if ROLLBACK_MARKER in (pedido.note or ''):
             done_pickings = pedido.picking_ids.filtered(lambda p: p.state == 'done')
             for picking in done_pickings:
@@ -74,7 +46,6 @@ for pedido in records:
             pedido.message_post(body="✅ Claude rollback finished. State=" + pedido.state, author_id=CLAUDE_AUTHOR)
             continue
 
-        # ===== B) RETRY PATH =====
         if pedido.state == 'purchase':
             pending = pedido.picking_ids.filtered(lambda p: p.state not in ('done', 'cancel'))
             if not pending:
@@ -91,7 +62,6 @@ for pedido in records:
                     if color in BLOCK_COLORS:
                         flagged.append(move.product_id.display_name + ': color=' + str(color))
                         continue
-                    # color == 0 — fallback по qty delta
                     paper = move.product_uom_qty or 0
                     actual = move.quantity or 0
                     delta = abs(paper - actual)
@@ -113,7 +83,6 @@ for pedido in records:
             pedido.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write({'x_studio_claude_finalize': False})
             continue
 
-        # ===== C) DRAFT PATH =====
         if pedido.state != 'draft':
             pedido.message_post(body="⛔ Claude finalize skipped: state=" + str(pedido.state), author_id=CLAUDE_AUTHOR)
             pedido.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write({'x_studio_claude_finalize': False})
@@ -132,8 +101,6 @@ for pedido in records:
             pedido.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write({'x_studio_claude_finalize': False})
             continue
         pedido.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).button_confirm()
-        # ===== Phase A2: ALWAYS write quantity = expected_qty с tracking_disable =====
-        # (даже если совпадает с product_qty — иначе button_validate сам напишет и спам)
         pack_lines_summary = []
         for picking in pedido.picking_ids:
             if picking.state == 'done':
@@ -144,7 +111,6 @@ for pedido in records:
                     continue
                 vals = {}
                 if line.uom_id.id == UOM_PAQUETE_ID:
-                    # Pack: paper paq × stems_per_paq
                     paq_count = line.product_qty
                     stems = line.x_studio_expected_qty or paq_count
                     vals['x_studio_received_packs'] = paq_count
@@ -152,18 +118,15 @@ for pedido in records:
                     avg = (stems / paq_count) if paq_count > 0 else 0
                     pack_lines_summary.append(line.name + ': ' + str(int(paq_count)) + ' пак × ' + str(round(avg, 1)) + ' = ' + str(int(stems)) + ' шт')
                 else:
-                    # Stem: always write quantity = expected_qty (или product_qty fallback)
                     target_qty = line.x_studio_expected_qty if line.x_studio_expected_qty else line.product_qty
                     vals['quantity'] = target_qty
                 if vals:
                     move.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write(vals)
-        # Pack-detection summary message (если есть pack lines) — plain text формат
         if pack_lines_summary:
             pack_body = "📦 Phase A2 (pack detection) — найдено " + str(len(pack_lines_summary)) + " пачек:\n"
             for s in pack_lines_summary:
                 pack_body += "• " + s + "\n"
             pedido.message_post(body=pack_body, author_id=CLAUDE_AUTHOR)
-        # ===== Final gate (по color) =====
         flagged = []
         orange_count = 0
         for picking in pedido.picking_ids:
@@ -178,7 +141,6 @@ for pedido in records:
                 if color in BLOCK_COLORS:
                     flagged.append(move.product_id.display_name + ': color=' + str(color))
                     continue
-                # color == 0 — fallback
                 paper = move.product_uom_qty or 0
                 actual = move.quantity or 0
                 delta = abs(paper - actual)
@@ -195,7 +157,6 @@ for pedido in records:
             pedido.message_post(body="⛔ Claude finalize stopped at gate (" + str(len(flagged)) + " moves blocked): " + '; '.join(flagged), author_id=CLAUDE_AUTHOR)
             pedido.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write({'x_studio_claude_finalize': False})
             continue
-        # ===== Validate pickings =====
         validated_picks = []
         for picking in pedido.picking_ids:
             if picking.state == 'done':
@@ -203,20 +164,69 @@ for pedido in records:
             picking.with_context(skip_backorder=True, tracking_disable=True, mail_create_nolog=True, mail_notrack=True).button_validate()
             if picking.state == 'done':
                 validated_picks.append(picking.name)
-        # ===== Picking-done summary chatter =====
         if validated_picks:
+            # ===== Detailed summary message =====
             line_count = len(pedido.order_line)
             pick_names = ', '.join(validated_picks)
             wh_name = ''
             if pedido.picking_type_id and pedido.picking_type_id.warehouse_id:
                 wh_name = pedido.picking_type_id.warehouse_id.name
-            done_body = "✅ " + pick_names + " done. " + str(line_count) + " строк сверены, paper-truth применён."
-            done_body += " Сумма pedido: " + str(round(pedido.amount_total, 2)) + "€."
+            # Collect orange lines from item_comment
+            orange_lines_list = []
+            green_count = 0
+            yellow_count = 0
+            for line in pedido.order_line:
+                comment = line.x_studio_item_comment or ''
+                if not comment:
+                    continue
+                first = comment.split('\n')[0] if '\n' in comment else comment
+                if '🟠' in comment:
+                    orange_lines_list.append('• ' + line.name + ' — ' + first)
+                elif '🟡' in comment:
+                    yellow_count += 1
+                elif '✅' in comment:
+                    green_count += 1
+            done_body = "✅ " + pick_names + " done. " + str(line_count) + " строк сверены, paper-truth применён.\n"
+            done_body += "Сумма pedido: " + str(round(pedido.amount_total, 2)) + "€."
             if wh_name:
                 done_body += " Warehouse: " + wh_name + "."
-            if orange_count > 0:
-                done_body += " " + str(orange_count) + " substantial (см. activity)."
+            done_body += "\n\n"
+            if orange_lines_list:
+                done_body += "🟠 " + str(len(orange_lines_list)) + " substantial fixes:\n"
+                for ol in orange_lines_list:
+                    done_body += ol + "\n"
+                done_body += "\n"
+            if yellow_count > 0:
+                done_body += "🟡 " + str(yellow_count) + " minor fixes\n"
+            done_body += "✅ " + str(green_count) + " green: clean paper-match"
             pedido.message_post(body=done_body, author_id=CLAUDE_AUTHOR)
+            # ===== Auto-create activity if orange/yellow/red present =====
+            if orange_lines_list or yellow_count > 0:
+                # Idempotency: skip if substantial activity уже есть
+                existing_activity = env['mail.activity'].search([
+                    ('res_model', '=', 'purchase.order'),
+                    ('res_id', '=', pedido.id),
+                    ('user_id', '=', 2),
+                ], limit=1)
+                if not existing_activity:
+                    purchase_model_id = env['ir.model'].search([('model', '=', 'purchase.order')], limit=1).id
+                    activity_note = "<p><b>" + str(len(orange_lines_list)) + " substantial fixes (orange):</b></p>"
+                    if orange_lines_list:
+                        activity_note += "<ol>"
+                        for ol in orange_lines_list:
+                            activity_note += "<li>" + ol[2:] + "</li>"
+                        activity_note += "</ol>"
+                    if yellow_count > 0:
+                        activity_note += "<p>+ " + str(yellow_count) + " minor (yellow) fixes — см. line.x_studio_item_comment.</p>"
+                    activity_note += "<p>Зелёных " + str(green_count) + " — clean paper-match, ревью не требуется.</p>"
+                    env['mail.activity'].create({
+                        'res_model_id': purchase_model_id,
+                        'res_id': pedido.id,
+                        'activity_type_id': 4,  # To-Do
+                        'user_id': 2,  # Andriy
+                        'summary': '🟠 Принять ' + str(len(orange_lines_list)) + ' substantial фиксов',
+                        'note': activity_note,
+                    })
         pedido.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write({'x_studio_claude_finalize': False})
 
     except Exception as e:
