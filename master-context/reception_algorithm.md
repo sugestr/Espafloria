@@ -1,4 +1,4 @@
-<!-- v: 17 | updated: 2026-05-01T01:30Z -->
+<!-- v: 18 | updated: 2026-05-01T01:45Z -->
 # Verdnatura Reception — Agent Specification
 
 **Audience:** autonomous reconciliation agent (subagent) или supervisor session, обрабатывающий Verdnatura albaranes 2026 в Espafloria SL.
@@ -315,13 +315,15 @@ Blocker C ставим **только** когда есть конкретный
 
 **Цель:** карточка товара после reconcile pedido = обученная для будущих pedidos. Codigo + цена + бумажная дата + имя как у поставщика + атрибуты в описании.
 
-#### §A3.1 Когда учим
-- ✅ **Учим** на 🚫 quarantine cards (категория «⛔ Карантин Holded», префикс 🚫 — это legitimate cards just в карантинной категории).
-- ❌ **НЕ учим** на:
-  - `⛔НОВЫЙ ТОВАР` (буквально такое имя — generic placeholder)
-  - `FLOR EXOTICA` (generic catch-all)
-  - `SANSIVIERIA` (generic generic)
-  - Любые другие явно-placeholder cards без specific identity
+#### §A3.1 Когда учим — по blocker-статусу, НЕ по card type
+
+**Простое правило:** учим **все non-blocker строки**. Не учим **blocker C** строки.
+
+- ✅ **Учим** если строка обработана decisively (KEEP / Variant A reassign / new card created / accept paper-truth) — то есть identity clearly resolved. **Не важно** какая это card — 🚫 quarantine / placeholder / normal — учим всё. Логика: paper.ref ↔ template связку накапливаем для всех successfully-обработанных строк, не теряем data.
+- ❌ **НЕ учим** если строка = **blocker C** (бот не уверен в идентификации, или предложил создать новую но не уверен, или не решился заменить card). Это потенциально wrong assignment — закрепить = ошибка.
+- ✅ **Второй проход** — после того как owner резолвит blocker (apply его решение через UI или MCP), бот **учит supplierinfo** на финальной карточке (та что owner подтвердил). Это происходит при retrigger 1217 или manual sweep.
+
+Это значит на pilot 12421571 (где было 2 blocker red) — учим **16 из 18** non-blocker lines прямо сейчас. Оставшиеся 2 (F Arroz Pink + F Cera Eden) — учим после ответа owner.
 
 #### §A3.2 supplierinfo create fields
 | Field | Value |
@@ -861,6 +863,7 @@ Subagent работает автономно — не разговаривает
 
 ## §J — VERSION
 
+- **v: 18 — 2026-05-01** — §A3.1 rule simplified per owner clarification 82.45: «учим все non-blocker строки, не учим blocker C, второй проход после owner resolution». Card type (placeholder/quarantine/normal) больше НЕ критерий. Не теряем data на любую decisively-обработанную строку.
 - **v: 17 — 2026-05-01** — fixes from pilot 12421571 + 12267946 owner feedback. **§A3 expanded supplierinfo** + product.template enrichment (codigo + price + date_start + product_name with attributes + description_purchase + x_studio_codigo_fabrica + optional rename via activity); placeholder vs quarantine clarification (🚫 quarantine = LEARN, ⛔НОВЫЙ ТОВАР / FLOR EXOTICA = NO LEARN — pending owner final decision per chat 82.44). **§B2 row 4 reformulation**: Odoo<paper Δ>tolerance — paper-truth + 🟡 yellow (раньше был red blocker) для moderate Δ ≤ MAJOR_THRESHOLD (=max(15, 30%)); only extreme Δ>MAJOR → 🔴 red. **§B2 pack matrix**: pack-conversion alone = silent green (НЕ orange) — explicit anti-pattern after subagent misclassified 4 pack rows as orange. **§B3 zero-backorder mechanism v17**: Phase A2 для pack lines пишет ОБА (`quantity` + `product_uom_qty = expected_qty / paq.factor`) — корневой fix на UoM 1:10 Odoo баг. Subagent rule: НИКОГДА direct state-write на picking (G8 violation, audit B3); если backorder возник — оставить + 🟠 activity. **§C1 opening шаблон**: естественный язык-история без жаргона (pack-stress-test, Phase A2, BLA/IN/...) — owner's mobile readability requirement.
 - **v: 16 — 2026-05-01** — restored 4 concrete operational guidances из v1 потерянных в condensation: §A2.11 Matching algorithms (positional 1:1 / qty-match / concept fuzzy / multi-paper→1 MIX consolidate); §A2.9 quantitative threshold ±50% price-similarity для consolidate-OK vs Variant A split; §3 Step 8 split на Hard checks (blocker) vs Diagnostic warnings (activity не blocker — totals/subtotal через L12 v3.5 политику); §G два паттерна — SKU Levenshtein 1-2 typo и Qty digit-loss (paper 19 Odoo 9). Идеальная агрегация v1 mechanics + v3.5 policy + HANDOVER hard rules + pilot 2026-04-30 decisions + audit fixes.
 - **v: 15 — 2026-05-01** — fix re-audit findings on v14: NB1 §B7 pseudocode regression (silent paper-truth price write was triggering yellow on every line — теперь explicit no-op для color logic); NM1 dark-blue=8 был unreachable из-за порядка проверок — переписан pseudocode с first-match-wins иерархией; NM2 conflict §B7 vs §B2:412 на accept-Holded ≤MINOR — green wins (historical precedence); NM3 pack-conversion within tolerance = green per §B2:419, только pack-with-Δ>tolerance = orange; NM4 D9 — `review_status_automation.py` добавлен в §H runtime checklist как contract mirror. Минор: «логист»→«бухгалтер/флорист», `picking_ids[0]`→`any(p)`, «Skip line»→«Skip pedido (mid-flight)». Backlog (§F4) для L7/L8/L12 + carantine + workaround edge case.
