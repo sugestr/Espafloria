@@ -1,4 +1,4 @@
-<!-- v: 16 | updated: 2026-05-01T01:00Z -->
+<!-- v: 17 | updated: 2026-05-01T01:30Z -->
 # Verdnatura Reception — Agent Specification
 
 **Audience:** autonomous reconciliation agent (subagent) или supervisor session, обрабатывающий Verdnatura albaranes 2026 в Espafloria SL.
@@ -311,16 +311,44 @@ Blocker C ставим **только** когда есть конкретный
 
 Если ни один алгоритм не даёт надёжный match для paper line → unmatched + activity (НЕ blocker C, см. §A2.10).
 
-### §A3 supplierinfo create fields
+### §A3 supplierinfo create + product.template enrichment
+
+**Цель:** карточка товара после reconcile pedido = обученная для будущих pedidos. Codigo + цена + бумажная дата + имя как у поставщика + атрибуты в описании.
+
+#### §A3.1 Когда учим
+- ✅ **Учим** на 🚫 quarantine cards (категория «⛔ Карантин Holded», префикс 🚫 — это legitimate cards just в карантинной категории).
+- ❌ **НЕ учим** на:
+  - `⛔НОВЫЙ ТОВАР` (буквально такое имя — generic placeholder)
+  - `FLOR EXOTICA` (generic catch-all)
+  - `SANSIVIERIA` (generic generic)
+  - Любые другие явно-placeholder cards без specific identity
+
+#### §A3.2 supplierinfo create fields
 | Field | Value |
 |---|---|
 | `partner_id` | 42 |
 | `product_tmpl_id` | template-id of card бот выбрал |
-| `product_code` | paper.ref |
-| `product_name` | `<concepto> (<productor>)` |
-| `price` | paper.PVP |
+| `product_code` | paper.ref (главное! без этого карточка не обучена) |
+| `product_name` | `<concepto> (<productor>) <key_attributes>` — например `Acacia (Mimosa Bola) >500 gr` |
+| `price` | paper.PVP (per uom) |
 | `min_qty` | 1 |
-| `date_start` | paper.FECHA |
+| `date_start` | paper.FECHA (дата бумаги) |
+
+#### §A3.3 product.template enrichment (одновременно с supplierinfo)
+Записываем на `product.template`:
+| Field | Когда писать | Value |
+|---|---|---|
+| `description_purchase` | Всегда если empty | `Auto-enriched from paper {ref} {date}: {concepto} ({productor}). Атрибуты: {ALTURA/COLOR/MACETA/PESO/Nº FLORES — те что есть в paper sub-line}` |
+| `x_studio_codigo_fabrica` | Если empty — записать `paper.ref`. Если non-empty — append через `;` если ref не уже там | sequence Verdnatura refs обслуженных этой картой |
+
+#### §A3.4 Card rename (опционально, через activity)
+Если card name явно generic (например `🚫 RSR ROSA RAMI - MIX` — слово MIX без конкретики):
+- НЕ переименовывать автоматически
+- Добавить **🟠 activity для owner** с предложением: «Переименовать `[название_сейчас]` → `[предложение based on paper attributes]`? Например `🚫 ROSA Mondial+Pretty Pillow MIX`»
+- Owner approves → manual rename через UI
+
+#### §A3.5 Multi-ref на одну card (MIX consolidate)
+Если N paper.ref'ов матчат одну Odoo MIX-card (per §B1a) — создаём **N supplierinfo записей** на тот же `product_tmpl_id` с разными `product_code`. Это нормально и желательно — карточка становится обучена N codigo одновременно.
 
 ### §A4 Carantine categories (для new card placement)
 - 207 — root «⛔ Карантин Holded»
@@ -415,24 +443,36 @@ is_pack = (
 )
 ```
 
-#### Tolerance
+#### Tolerance & MAJOR_THRESHOLD
 ```python
 if is_pack:
     tolerance = min(max(15, int(paper.qty * 0.30)), paper.qty)  # cap by paper qty
 else:  # stem
     tolerance = max(4, int(paper.qty * 0.05))  # progressive
+
+# Big-delta cutoff (для решения yellow vs blocker red)
+MAJOR_THRESHOLD = max(15, int(paper.qty * 0.30))  # 15 stems OR 30% paper
 ```
 
-#### Decision matrix
+#### Decision matrix (stem товары)
 | Сравнение | Action | review_color |
 |---|---|---|
-| paper.qty == Odoo.qty (или within tolerance) | accept paper qty | ✅ green (10) |
-| Odoo > paper, в пределах MINOR_THRESHOLD (≤5 stems) | accept Odoo silent (Verdnatura прислал чуть больше — щедрость) | ✅ green |
-| Odoo > paper > tolerance (stem) | **paper-truth override** + activity (опечатка пересчёта бухгалтера; не реальная over-delivery) | 🟠 orange (2) |
-| Odoo < paper > tolerance (stem) | **BLOCKER C** | 🔴 red (1) — бухгалтер недосчитал, owner decode |
-| ratio ≈ ×2 (любая сторона) | **paper-truth override** + activity «×2 наблюдение, известный баг двойного импорта Holded→Odoo или редкий duplicate-scan» | 🟡 yellow (3) — gate проходит, owner информирован |
-| Pack pure paper-match | accept | ✅ green + 📦 |
-| Pack qty mismatch within tolerance | accept | ✅ green + 📦 |
+| paper.qty == Odoo.qty (или Δ ≤ tolerance) | accept paper qty | ✅ green (10) |
+| Odoo > paper, Δ ≤ MINOR_THRESHOLD (≤5) | accept Odoo silent (Verdnatura прислал чуть больше — щедрость) | ✅ green |
+| Odoo > paper, MINOR < Δ ≤ MAJOR_THRESHOLD | **paper-truth override** + activity «бухгалтер пересчитал вверх, поправлено по бумаге» | 🟠 orange (2) |
+| Odoo > paper, Δ > MAJOR_THRESHOLD | **BLOCKER C** — extreme over-recount, расследовать | 🔴 red (1) |
+| Odoo < paper, Δ ≤ tolerance | accept Odoo silent (бухгалтер мелко недосчитал) | ✅ green |
+| Odoo < paper, tolerance < Δ ≤ MAJOR_THRESHOLD | **paper-truth override** + activity «бумага говорит +N, физически проверь — возможна недопоставка Verdnatura, scrap if needed» | 🟡 yellow (3) |
+| Odoo < paper, Δ > MAJOR_THRESHOLD | **BLOCKER C** — extreme недостача, recourse Verdnatura или опечатка ввода | 🔴 red (1) |
+| ratio ≈ ×2 (любая сторона) | **paper-truth override** + activity «×2 наблюдение, известный баг двойного импорта Holded→Odoo» | 🟡 yellow (3) |
+
+#### Decision matrix (pack товары)
+| Сравнение | Action | review_color |
+|---|---|---|
+| Pack pure paper-match (paper.cant == Odoo.paq) + UoM=Paquete + expected_qty filled | accept | ✅ green + 📦 |
+| Pack with Δ ≤ tolerance (paq qty match within 30%) | accept | ✅ green + 📦 |
+| **Pack-conversion alone** — бухгалтер импорт сделал в stems-формате, бот переводит в paq + UoM=31 + expected_qty=stems, без Δ qty | **silent green + 📦 — НЕ orange** | ✅ green |
+| Pack with Δ > tolerance на pack qty (paper 5 paq, Odoo 8 paq — substantial mismatch) | paper-truth override + activity | 🟠 orange (2) |
 
 **Pack-conversion alone — НЕ orange.** 📦 marker в item_comment, color остаётся green по qty.
 
@@ -454,7 +494,24 @@ else:  # stem
 
 📦 icon в `item_comment` line 1: `✅ Пачки <name>. N пачек × ~M stems = total шт на склад.`
 
-**Zero-backorder gate:** Phase A2 пишет точные штуки + `picking.button_validate(skip_backorder=True)` — Odoo не должен создавать backorder. Если backorder возникает в pilot → это баг конкретного кейса (разбираем отдельно), **не штатное поведение**.
+**Zero-backorder gate (v17 механизм):**
+Корневая проблема: Odoo жёстко считает `move.product_uom_qty * uom.factor = expected stems`. Если `uom_id=31 (Paquete, factor=10)`, и `product_uom_qty=4 paq`, то Odoo ожидает 40 stems. Если Phase A2 пишет `quantity=18` (реальные штуки), Odoo видит «получено 18 < ожидалось 40» → создаёт backorder.
+
+**Fix:** Phase A2 для pack lines пишет **ОБА значения синхронно**:
+```python
+move.write({
+    'quantity': expected_qty,                      # точные штуки на склад
+    'product_uom_qty': expected_qty / uom.factor,  # дробные паки чтобы Odoo не считал по 1:10
+    'x_studio_received_packs': paper.cant,
+})
+```
+Тогда Odoo видит «ожидалось paq×factor=stems = принято stems → 0 backorder» ✅.
+
+**Альтернатива** (если дробные паки ломают что-то другое): переключить `move.product_uom_id = 1 (Tallo)` + `move.product_uom_qty = expected_qty` (move в штуках, pedido line остаётся в паках). Тестируется на pilot — фиксируется работающий вариант в action 1217 v7.8.
+
+**Если backorder всё-таки возник** (gate failure):
+- ❌ **НЕ закрывать direct state-write** на picking — это violation invariant G8 (state machines через штатный action).
+- ✅ **Оставить backorder + 🟠 activity для owner**: «backorder #X создался despite zero-backorder gate — нужен manual cancel или ручной разбор. v7.8 backlog: auto-cancel через `picking.action_cancel()`».
 
 ### §B4 Tax decision
 - paper IVA = R 10% → `tax_ids = [[6, 0, [68]]]` (goods) или 70 (service)
@@ -525,10 +582,29 @@ else:
 **Принцип:** owner на мобильном должен понять суть за 5 секунд из первой строки. Детали и техника — внизу для тех кто хочет дойти до уровня. **Никаких ref/tmpl_id/uom_id в первой строке.**
 
 ### §C1 Summary message (mail.message body, HTML)
+
+**Принцип первой секции:** рассказать **историю** простым языком, без технических терминов. Owner должен понять «что случилось» за 5 секунд. Цифры и detail — ниже, не в opening.
+
+**Шаблон opening (естественный язык):**
+```
+Verdnatura прислала <N> строк товара на <X>€ для магазина <name> (например Olimpic, Plaza, Gloria).
+Бухгалтер импортировал <M> строк в Odoo (<diff комментарий: «правильно» / «на K больше» / «K строк потерял»).
+Бот: <1-2 предложения о главных правках простым языком — например «4 пакетных товара обработал по правилу пачки/штуки, 3 лишних обнулил, на 1 строке исправил недосчёт по бумаге, 1 товар добавил вручную»>.
+```
+
+**Что НЕ писать в opening:**
+- ❌ `pack-stress-test`, `Phase A2`, `UoM=31`, `tax_ids`, `picking BLA/IN/00064`
+- ❌ Цифры через дефис типа `recount=stems×factor`
+- ❌ Английские термины кроме общеупотребительных (бумага, бухгалтер, склад, recount)
+
+**Что писать:**
+- ✅ Имена магазинов (Olimpic, Plaza, Gloria, Augusta, Diagonal)
+- ✅ Простые формулировки («пакетный товар», «лишних обнулил», «потерял строку», «недосчитал»)
+- ✅ Сумма в €, имя поставщика, дата если важна
+
 ```html
 <p><b>🤖 Что случилось в принципе:</b></p>
-<p>Бумага Verdnatura пришла с N строками на сумму X€ (warehouse, address).
-[1-2 предложения объяснения сути — что бухгалтер сделал, что бот поправил].</p>
+<p><Шаблон выше — 2-3 предложения простым языком, без жаргона.></p>
 
 <p><b>Что в результате:</b></p>
 <ul>
@@ -785,6 +861,7 @@ Subagent работает автономно — не разговаривает
 
 ## §J — VERSION
 
+- **v: 17 — 2026-05-01** — fixes from pilot 12421571 + 12267946 owner feedback. **§A3 expanded supplierinfo** + product.template enrichment (codigo + price + date_start + product_name with attributes + description_purchase + x_studio_codigo_fabrica + optional rename via activity); placeholder vs quarantine clarification (🚫 quarantine = LEARN, ⛔НОВЫЙ ТОВАР / FLOR EXOTICA = NO LEARN — pending owner final decision per chat 82.44). **§B2 row 4 reformulation**: Odoo<paper Δ>tolerance — paper-truth + 🟡 yellow (раньше был red blocker) для moderate Δ ≤ MAJOR_THRESHOLD (=max(15, 30%)); only extreme Δ>MAJOR → 🔴 red. **§B2 pack matrix**: pack-conversion alone = silent green (НЕ orange) — explicit anti-pattern after subagent misclassified 4 pack rows as orange. **§B3 zero-backorder mechanism v17**: Phase A2 для pack lines пишет ОБА (`quantity` + `product_uom_qty = expected_qty / paq.factor`) — корневой fix на UoM 1:10 Odoo баг. Subagent rule: НИКОГДА direct state-write на picking (G8 violation, audit B3); если backorder возник — оставить + 🟠 activity. **§C1 opening шаблон**: естественный язык-история без жаргона (pack-stress-test, Phase A2, BLA/IN/...) — owner's mobile readability requirement.
 - **v: 16 — 2026-05-01** — restored 4 concrete operational guidances из v1 потерянных в condensation: §A2.11 Matching algorithms (positional 1:1 / qty-match / concept fuzzy / multi-paper→1 MIX consolidate); §A2.9 quantitative threshold ±50% price-similarity для consolidate-OK vs Variant A split; §3 Step 8 split на Hard checks (blocker) vs Diagnostic warnings (activity не blocker — totals/subtotal через L12 v3.5 политику); §G два паттерна — SKU Levenshtein 1-2 typo и Qty digit-loss (paper 19 Odoo 9). Идеальная агрегация v1 mechanics + v3.5 policy + HANDOVER hard rules + pilot 2026-04-30 decisions + audit fixes.
 - **v: 15 — 2026-05-01** — fix re-audit findings on v14: NB1 §B7 pseudocode regression (silent paper-truth price write was triggering yellow on every line — теперь explicit no-op для color logic); NM1 dark-blue=8 был unreachable из-за порядка проверок — переписан pseudocode с first-match-wins иерархией; NM2 conflict §B7 vs §B2:412 на accept-Holded ≤MINOR — green wins (historical precedence); NM3 pack-conversion within tolerance = green per §B2:419, только pack-with-Δ>tolerance = orange; NM4 D9 — `review_status_automation.py` добавлен в §H runtime checklist как contract mirror. Минор: «логист»→«бухгалтер/флорист», `picking_ids[0]`→`any(p)`, «Skip line»→«Skip pedido (mid-flight)». Backlog (§F4) для L7/L8/L12 + carantine + workaround edge case.
 - **v: 14 — 2026-04-30** — restored from v11 (lost during v12 condensation): §B7 color assignment matrix (когда ставить какой цвет, особенно dark-blue=8 «robot clean fill» case), §F1 pedido-level visual status full content (3-tier definition + workaround filters + implementation design pseudocode). Owner workflow + agent decision logic preserved.
