@@ -1,4 +1,6 @@
-# Server action: 🤖 Claude AI Reconcile Finalize  (v7.8)
+# Server action: 🤖 Claude AI Reconcile Finalize  (v7.9)
+# v7.9 (2026-05-01): hotfix — field rename `product_uom` → `uom_id` на stock.move в Odoo 19.
+#                    v7.8 падал с Invalid field 'product_uom' на pack lines.
 # v7.8 (2026-05-01): zero-backorder fix для pack lines + auto-cancel-delete backorder если возник.
 #                    Phase A2 для pack (uom_id=31) теперь пишет product_uom_id=1 (Tallo) +
 #                    product_uom_qty=stems → Odoo не пересчитывает по 1:10 → backorder не создаётся.
@@ -124,9 +126,10 @@ for pedido in records:
                     paq_count = line.product_qty
                     stems = line.x_studio_expected_qty or paq_count
                     vals['x_studio_received_packs'] = paq_count
-                    # zero-backorder v7.8: switch move uom to Tallo + qty in stems
+                    # zero-backorder v7.9: switch move uom to Tallo + qty in stems
                     # so Odoo expected = received = stems → no backorder
-                    vals['product_uom'] = 1  # Tallo (line stays Paquete, only move uom switched)
+                    # v7.9: field name is 'uom_id' on stock.move в Odoo 19 (НЕ 'product_uom')
+                    vals['uom_id'] = 1  # Tallo (line stays Paquete, only move uom switched)
                     vals['product_uom_qty'] = stems
                     vals['quantity'] = stems
                     avg = (stems / paq_count) if paq_count > 0 else 0
