@@ -1,4 +1,4 @@
-<!-- v: 7 | updated: 2026-04-30T17:30Z -->
+<!-- v: 8 | updated: 2026-04-30T18:30Z -->
 # Verdnatura reception algorithm — Espafloria 2026
 
 Жёсткий алгоритм приёмки albaranes Verdnatura для свежей сессии Claude. Subagents следуют без отклонений. Supervisor (Claude в свежей сессии) калибрует на pilot и обновляет с owner approve.
@@ -163,18 +163,45 @@ pdftotext -layout /path/to/verdnatura_<docNum>.pdf -
 | `x_studio_expected_qty` | florist physical count |
 | stock.move.quantity (Phase A2) | `expected_qty` (florist) — почти всегда |
 
-#### Decision rule по qty (карточка ОК) — **direction-aware**
-По handover §2.4 owner verbatim: «положительная дельта (Odoo > paper) = щедрость поставщика → auto-OK; отрицательная (paper > Odoo) = подозрение → flag».
+#### Decision rule по qty (карточка ОК) — **direction-aware** + **прогрессивный tolerance**
+
+**Owner verbatim (decision 2026-04-30 на pilot 12186266):** «я бы сказал ±3 или 4 штуки на штучном товаре — это максимум расхождения. Ну разве что приезжала БОЛЬШАЯ ПАРТИЯ (например 200 штук) — там может быть больше ошибок. Для всяких веток типа мимоза — всегда плавающее число в пачках».
+
+**Tolerance threshold по типу товара:**
+
+```python
+if is_pack_product:  # Mimosa, EUC, Skimmia, ветки, известные pack-товары
+    tolerance = max(15, int(paper_qty * 0.30))  # 15 stems base, 30% — "в разумных пределах реалистичности"
+else:  # Stem (штучный) — розы, гвоздики, лилии, etc.
+    tolerance = max(4, int(paper_qty * 0.05))  # 4 stems base, 5% для больших партий
+```
+
+**Pack tolerance examples (owner verbatim 2026-04-30: «в разумных пределах реалистичности»):**
+- Mimosa 100 stems (4 paq) → tolerance 30 → 70-130 stems OK
+- EUC 50 stems (5 paq × 10) → tolerance 15 → 35-65 stems OK
+- Rose pack 25 stems (1 paq) → tolerance 15 → 10-40 stems OK
+- Pack 500 stems → tolerance 150 (30%)
+
+**Примеры stem tolerance:**
+- paper 12 stems → tolerance 4 (12+4=16 max OK)
+- paper 50 stems → tolerance 4 (50+4=54 max)
+- paper 100 stems → tolerance 5 (5%)
+- paper 200 stems → tolerance 10 (5%)
+- paper 500 stems → tolerance 25
+
+**Decision matrix:**
 
 | Случай | stock.move.quantity | review_color | reason |
 |---|---|---|---|
-| Pack (UD VENTA Paquete) | florist stems (expected_qty) | оранжевый 🟠 (2) | substantial pack-conversion |
-| Stem direct (paper == florist) | paper (= florist) | зелёный ✅ (10) | clean match |
-| Stem small delta любого знака (\|delta\| ≤ 5) | florist | жёлтый 🟡 (3) | физическая порча / extra |
-| Stem **positive** delta > 5 (Odoo > paper) при правильной карточке | florist | жёлтый 🟡 (3) | accept Holded recount — Verdnatura переотгрузил («щедрость») |
-| Stem **negative** delta > 5 (paper > Odoo) при правильной карточке | flag | красный ❌ (1) | бухгалтер недосчитал ИЛИ массивная порча — owner decode |
+| Pack (UD VENTA Paquete or known pack товар) | florist stems (expected_qty) | оранжевый 🟠 (2) | substantial pack-conversion |
+| Stem direct (paper == Odoo) | paper | зелёный ✅ (10) | clean match |
+| Stem **\|delta\| ≤ tolerance** на штучном | florist | жёлтый 🟡 (3) | физическая порча / minor extra |
+| Stem **positive** delta > tolerance (Odoo > paper) на штучном | **paper** (override Odoo) + comment | оранжевый 🟠 (2) — orange not yellow | **Подозрение на ошибку пересчёта бухгалтера**. Поставщик не делает +N stems на штучном товаре. Возвращаем к paper. Activity для owner: «paper N, Odoo M (+delta) — возможно pack/stem конфузия или ошибка ввода». Если owner решит overrule → ручной revert. |
+| Stem **negative** delta > tolerance (paper > Odoo) на штучном | flag | красный ❌ (1) | бухгалтер недосчитал ИЛИ массивная порча — owner decode |
 | ×N positive >2 без pack signals | flag | красный ❌ (1) | suspect pack/stem confusion — owner verify pack или real over-delivery |
 | **×2 ровно** ratio | flag | красный ❌ (1) | suspect bookkeeper double-scan (handover §5.7 — 5/7 accept-Holded имели ≈×2) — owner подтверди |
+
+**Изменение по сравнению с v7 алгоритма:** «положительная дельта auto-accept Holded → жёлтый» **БОЛЬШЕ НЕ default**. Теперь positive дельта на штучном товаре с >tolerance → **paper-truth wins + orange + activity**. Для pack-товаров — auto-accept по-прежнему OK.
 
 ### 4.3 Pack-vs-unit
 Уже принято в 4.2. Документируется в `x_studio_item_comment` с иконкой 📦.
@@ -785,3 +812,53 @@ Pilot 12187009 закрыт на Blau (BLA/IN/00060). Paper dirección «C. OLIM
 - **Чат-лента** (mail.message с author_id=56) на каждом pedido — 3-слойный лог
 
 Список activities = пошаговый review queue для owner: идти, отмечать «принято» или давать решение.
+
+---
+
+## 18. Pedido-level visual status indicator (decision 2026-04-30)
+
+**Owner verbatim:** «мне очень важно сразу легко понимать глядя на pedido или список pedido — закрыто всё зелёное / закрытое есть жёлтое-оранжевое / не закрыто (на склад не ушло, надо решать какие-то проблемы лично)».
+
+### 18.1 Три уровня pedido-level status
+| Бейдж | Условие | Что значит |
+|---|---|---|
+| 🟢 **Closed clean** | `state='purchase'` AND все `picking.state == 'done'` AND все `stock.move.x_studio_review_color in (10, 8)` (green/dark blue) | Закрыт, всё чисто, owner может игнорировать |
+| 🟡 **Closed needs review** | `state='purchase'` AND все `picking.state == 'done'` AND **хотя бы один** `stock.move.x_studio_review_color in (3, 2)` (yellow/orange), но **нет красных** | Закрыт, но есть substantial fixes — ревью в activity |
+| 🔴 **Not closed** | `state != 'purchase'` OR любой `picking.state != 'done'` OR любой `stock.move.x_studio_review_color in (1, 4)` (red/blue legacy «нужен ввод») | Не закрыт, физика на склад не ушла (или частично), нужно решать лично |
+
+### 18.2 Implementation design
+**Поле:** `purchase.order.x_studio_pedido_status` (selection: `green` / `yellow` / `red`) — **computed** через server action или Studio compute.
+
+**Compute logic (псевдокод):**
+```python
+def compute_pedido_status(pedido):
+    if pedido.state != 'purchase':
+        return 'red'
+    pickings = pedido.picking_ids
+    if any(p.state != 'done' for p in pickings):
+        return 'red'
+    moves = pedido.picking_ids.move_ids
+    if any(m.x_studio_review_color in (1, 4) for m in moves):
+        return 'red'
+    if any(m.x_studio_review_color in (3, 2) for m in moves):
+        return 'yellow'
+    return 'green'
+```
+
+**Trigger обновления:** server action на `on_create_or_write` для `stock.move.x_studio_review_color` и `stock.picking.state`. Recompute parent pedido status.
+
+**Visual:** kanban view конфиг — color-by `x_studio_pedido_status` (green=10, yellow=3, red=1 в Odoo color palette). Или badge widget в list view.
+
+### 18.3 Implementation status (open work)
+🔴 **Не реализовано** — это design note. Implementation требует:
+1. Studio: создать selection field `x_studio_pedido_status` на `purchase.order`.
+2. Server action компьютирующая статус (база.automation на изменение related stock.move.x_studio_review_color).
+3. List view конфиг — colored badge / decoration по статусу.
+
+Сделать **после batch reception** (пока 166 pedidos closed по алгоритму, status не критичен — owner идёт по activity queue). Потом implement field + view → owner видит полный список с бейджами один взглядом.
+
+### 18.4 Workaround до implementation
+Owner может использовать существующие Odoo фильтры:
+- **Closed all clean (🟢):** filter `state='purchase'` + `activity_ids = []` (нет activity). Activities не создаются для зелёных-чистых pedidos (по §8.4).
+- **Closed needs review (🟡):** filter `state='purchase'` + `activity_ids != []` (есть activity).
+- **Not closed (🔴):** filter `state='draft'` OR `state='purchase'` AND `picking_ids[0].state != 'done'`.

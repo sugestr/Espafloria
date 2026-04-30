@@ -157,12 +157,11 @@ for pedido in records:
                     vals['quantity'] = target_qty
                 if vals:
                     move.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write(vals)
-        # Pack-detection summary message (если есть pack lines)
+        # Pack-detection summary message (если есть pack lines) — plain text формат
         if pack_lines_summary:
-            pack_body = "<p>📦 <b>Phase A2 (pack detection)</b> — найдено " + str(len(pack_lines_summary)) + " пачек:</p><ul>"
+            pack_body = "📦 Phase A2 (pack detection) — найдено " + str(len(pack_lines_summary)) + " пачек:\n"
             for s in pack_lines_summary:
-                pack_body += "<li>" + s + "</li>"
-            pack_body += "</ul>"
+                pack_body += "• " + s + "\n"
             pedido.message_post(body=pack_body, author_id=CLAUDE_AUTHOR)
         # ===== Final gate (по color) =====
         flagged = []
@@ -211,13 +210,12 @@ for pedido in records:
             wh_name = ''
             if pedido.picking_type_id and pedido.picking_type_id.warehouse_id:
                 wh_name = pedido.picking_type_id.warehouse_id.name
-            done_body = "<p>✅ <b>" + pick_names + " done.</b> " + str(line_count) + " строк сверены, paper-truth применён."
+            done_body = "✅ " + pick_names + " done. " + str(line_count) + " строк сверены, paper-truth применён."
             done_body += " Сумма pedido: " + str(round(pedido.amount_total, 2)) + "€."
             if wh_name:
-                done_body += " Warehouse: <b>" + wh_name + "</b>."
+                done_body += " Warehouse: " + wh_name + "."
             if orange_count > 0:
                 done_body += " " + str(orange_count) + " substantial (см. activity)."
-            done_body += "</p>"
             pedido.message_post(body=done_body, author_id=CLAUDE_AUTHOR)
         pedido.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write({'x_studio_claude_finalize': False})
 
