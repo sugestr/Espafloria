@@ -1,4 +1,4 @@
-<!-- v: 8 | updated: 2026-04-30T18:30Z -->
+<!-- v: 11 | updated: 2026-04-30T21:00Z -->
 # Verdnatura reception algorithm — Espafloria 2026
 
 Жёсткий алгоритм приёмки albaranes Verdnatura для свежей сессии Claude. Subagents следуют без отклонений. Supervisor (Claude в свежей сессии) калибрует на pilot и обновляет с owner approve.
@@ -119,10 +119,15 @@ pdftotext -layout /path/to/verdnatura_<docNum>.pdf -
 - Wrong card с разной ценой (×1.5+) → reassign / split (substantial fix → 🟠).
 - Карта-placeholder (`⛔НОВЫЙ ТОВАР`) → search existing → reassign or create new.
 
-#### 4.1.1 MIX-карта — когда допустимо держать N variety на одной
-**Правило (owner verbatim 2026-04-30 на pilot 12187009):** «MIX для орхидей если цена закупки более менее похожа (были эксклюзивные орхидеи тоже у нас)».
+#### 4.1.1 MIX-карта — PREFERRED grouping (decision 2026-04-30 v2)
+**Owner verbatim 2026-04-30 v2 на pilot 12186258:** «есть логика все гвоздики посадить на один MIX, цена похожа и форма почти такая же, слегка цвет гуляет. Возможно остальные товары так же имеет смысл кидать на MIX карточку. Мы решили попробовать упростить и похожий товар группировать в продаже и учёте чтобы было легче флористам и нам. Если группировка оправдана — я бы её сохранял и даже продвигал дальше».
 
-Допустимо держать N разных variety на одной MIX-карте (название содержит «MIX» / «OTHER» / generic family wording) **если** цены закупки variants близкие — `max(prices) / min(prices) ≤ 1.5`.
+**Принцип: MIX-карта PREFERRED (не просто допустимо)** для семейного товара когда:
+- **Форма/тип почти совпадает** (CL разных сортов, CR разных сортов, PAN разных цветов, PHAL разных variants)
+- **Цены закупки близкие** — `max(prices) / min(prices) ≤ 1.5`
+- **Цвет / сорт / productor варьируется**
+
+**Цель:** упростить учёт + флористам понятнее. Не плодить «карта = 1 codigo = 1 sort» если форма+цена близкие. На MIX-карту учим N разных Verdnatura ref через supplierinfo.
 
 **Эксклюзивные premium variants** (цена ×1.5+ от средней по MIX) → distinct card обязательна (memory `feedback_card_distinct_codigos.md` priority).
 
@@ -211,14 +216,16 @@ else:  # Stem (штучный) — розы, гвоздики, лилии, etc.
 - Paper IVA = G 21% → tax_id = 21%.
 - Если Odoo line имеет другой tax → переписать.
 
-### 4.5 Цена
-**Paper price ВСЕГДА wins.** При сверке Verdnatura pedidos `purchase.order.line.price_unit` всегда выставляется = paper PVP, **без сравнения** с текущей Odoo ценой. Holded import цены — не источник истины.
+### 4.5 Цена — silent paper-truth override
+**Paper price ВСЕГДА wins.** При сверке Verdnatura pedidos `purchase.order.line.price_unit` всегда выставляется = paper PVP. **Никаких markers** в item_comment, **никаких сравнений** с Holded/Odoo current price.
 
-**Why (decision 2026-04-30):** owner verbatim на pilot 12187009: «а мы по сути всегда с бумаги будем брать цену потому что Holded albaran цена не верна, скорее всего ноль или средняя закупочная там стоит случайно». Бухгалтер в Holded мог поставить 0 (placeholder), среднюю закупочную из истории, или не дозаполнить. Бумага = единственная актуальная цена дня поставки. Pilot 12187009 confirmed: 8 lines имели Odoo price ≠ paper, все автоматически перезаписаны → +169.97€ от 466.17€ к 636.14€ (paper Total).
+**Why (decision 2026-04-30 на pilot 12186258):** owner verbatim: «тебе НЕ важна цена в Holded или pedido — ты её всегда берёшь с PDF, не надо их сравнивать!» Также: «мелкие ошибки округления и подгонка финальной цифры в Holded — если расхождение до 5 центов = явно подгонка, просто пиши норм цену даже не помечай жёлтым».
 
 **How to apply:**
-- В Phase A на `purchase.order.line` — всегда `write({'price_unit': paper.PVP})` без проверки delta.
-- Если paper PVP = 0 (редкий случай) → flag для owner, не записывать как-есть.
+- В Phase A на `purchase.order.line` — всегда `write({'price_unit': paper.PVP})` **silent**, без проверки delta, без markers.
+- Не пишем `🟡` или текст «Цена: X → Y» в `x_studio_item_comment` для price-only fixes.
+- В item_comment просто `✅` если linе clean. Если есть substantial issue (wrong card / wrong sort / phantom dup) → `🟠`. Цена сама по себе никогда не triggers `🟡`.
+- Если paper PVP = 0 (очень редкий случай) → flag для owner, не записывать как-есть.
 - Не относится к sale.order — там цена с pricelist.
 
 ### 4.6 Line.name синхронизация (decision 2026-04-30)
@@ -454,11 +461,58 @@ else:                          # color == 0 (нет computed) — fallback по 
 ### 8.2 Author
 Все `mail.message` create — `author_id=56` (🤖 Claude AI Reconciliation).
 
-### 8.3 Tone — структура коммента (3 слоя)
+### 8.3 Tone — структура коммента / explanation (decision 2026-04-30 v3)
+**Owner verbatim:** «общий отчёт тяжело читать много спец деталей сразу в лоб без понятного объяснения что случилось в принципе. Будут объяснения мне понятнее».
+
+**Универсальная структура для item_comment + summary message + activity note + ответов в чате:**
+
 ```
-[1 строка] Что произошло понятно (для owner на mobile)
-[2 строка] Детали: codigo, qty, цена, IVA
-[3 строка] [Лог] machine-readable structured (опц.)
+1. ОБЗОР — что в принципе случилось простыми словами (1-2 предложения)
+   └─ Без техники. Без ref/tmpl_id/uom_id/safe_eval. Что бот ПОНЯЛ + что СДЕЛАЛ.
+   Пример: «Бухгалтер положил все хризантемы на один сорт (Molly Yellow), а в бумаге другой — Altaj. Поправил».
+
+2. КАК ИСПРАВЛЕНО — короткие группы похожих фиксов
+   └─ Если несколько похожих исправлений — группировать по типу.
+   Пример: «5 строк гвоздик: бухгалтер положил все на один сорт «Molly Yellow», бот разнёс по правильным сортам с бумаги».
+
+3. ДЕТАЛИ — список конкретных строк (только если нужно review owner'у)
+   └─ Per-line bullet с минимумом jargon. Refs в скобках.
+
+4. [Лог] — машинный лог в самом конце для аудита
+   └─ Технические fields для re-process / debug. Owner может скипнуть.
+```
+
+**Принцип:** owner на мобильном должен ПОНЯТЬ суть за 5 секунд из первой строки. Детали и техника — внизу для тех кто хочет дойти до уровня.
+
+**Per item_comment пример новый:**
+```
+🟠 Бухгалтер положил все хризантемы на один сорт (Molly Yellow), а в бумаге другой — Altaj Galaxy. Поправил название и код. Карта-полка та же общая для хризантем.
+Бумага: 20 шт × 1.24€ = 24.80€ (Verdnatura ref 197433, IVA 10%, ALTURA 70cm).
+[Лог] supplier_sku=197433 expected_qty=20 price=1.24 paper_match=positional card=MIX_consolidate
+```
+
+**Per summary message пример:**
+```
+🤖 Что случилось в принципе:
+Бумага Verdnatura пришла с N строками на сумму X€ (warehouse, address).
+Бухгалтер положил всё на правильные семейные карты, но СПУТАЛ конкретные сорта (для всех CR один «Molly Yellow», для всех TUL — «North Pole»). Бот разнёс по правильным сортам.
+
+Также M строк это пачки (мимоза, евкалипт) — штатная ситуация, бот перевёл uom на «Пачки» 📦.
+
+Что в результате:
+• K substantial fixes — бухгалтер put неправильный сорт
+• L pack-only — clean (зелёные с 📦)
+• N clean — без правок
+• Сумма pedido X€ ↔ бумага X€ ✅
+• Picking PLA/IN/00XXX done на warehouse Y ✅
+
+🟠 K substantial (нужен ревью):
+1. [Ref] Concepto — что было / что стало / коротко.
+...
+
+✅ Чистых: список refs с 📦 для pack-only.
+
+[Лог] session=... algo=v11 closed=...
 ```
 
 Простой язык, минимум Odoo-жаргона. Owner читает на мобильном.

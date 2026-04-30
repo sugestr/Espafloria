@@ -1,9 +1,14 @@
-# Server action: 🤖 Claude AI Reconcile Finalize  (v7.3)
-# v7.3 (2026-04-30):
-#   1. Body summary использует <br/> вместо \n для line breaks (Odoo HTML view не рендерит \n).
-#   2. env.cr.flush() ПЕРЕД pedido.message_post(summary) — flushes pending Odoo auto-tracking
-#      messages from button_validate FIRST, чтобы Claude summary имел БОЛЬШИЙ id и появлялся
-#      первым в chatter (newest top, под Activities).
+# Server action: 🤖 Claude AI Reconcile Finalize  (v7.7)
+# v7.7 (2026-04-30): УПРОЩЕНИЕ — summary message + activity убраны из action 1217.
+#                    Subagent сам постит summary + creates activity через MCP create_record
+#                    после своего trigger/verify. Это работает (pilot 1-5 confirmed) — direct
+#                    create на mail.message bypass sanitize, HTML рендерится правильно.
+# v7.6: попытка env['mail.message'].create() server-side (escape всё равно был на v7.5)
+# v7.5: body starts with <p> (Odoo escape'ила inner tags)
+# v7.3-v7.4: <br/>/counts experiments
+# v7.2: detailed summary + auto-activity (HTML escape проблема)
+# v7: Phase A2 always writes quantity + gate-by-color
+# v6: tracking_disable + remove generic "✅ done"
 # v7.2: детальный summary chatter (с list orange/yellow/green) + auto-create mail.activity
 # v7.1: plain text summary (HTML escape fix)
 # v7: Phase A2 always writes quantity + gate-by-color + summaries
@@ -122,11 +127,7 @@ for pedido in records:
                     vals['quantity'] = target_qty
                 if vals:
                     move.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write(vals)
-        if pack_lines_summary:
-            pack_body = "📦 Phase A2 (pack detection) — найдено " + str(len(pack_lines_summary)) + " пачек:<br/>"
-            for s in pack_lines_summary:
-                pack_body += "• " + s + "<br/>"
-            pedido.message_post(body=pack_body, author_id=CLAUDE_AUTHOR)
+        # Phase A2 pack-detection summary — subagent сам постит после verify (формат pilot 1).
         flagged = []
         orange_count = 0
         for picking in pedido.picking_ids:
@@ -164,71 +165,8 @@ for pedido in records:
             picking.with_context(skip_backorder=True, tracking_disable=True, mail_create_nolog=True, mail_notrack=True).button_validate()
             if picking.state == 'done':
                 validated_picks.append(picking.name)
-        if validated_picks:
-            # ===== Detailed summary message =====
-            line_count = len(pedido.order_line)
-            pick_names = ', '.join(validated_picks)
-            wh_name = ''
-            if pedido.picking_type_id and pedido.picking_type_id.warehouse_id:
-                wh_name = pedido.picking_type_id.warehouse_id.name
-            # Collect orange lines from item_comment
-            orange_lines_list = []
-            green_count = 0
-            yellow_count = 0
-            for line in pedido.order_line:
-                comment = line.x_studio_item_comment or ''
-                if not comment:
-                    continue
-                first = comment.split('\n')[0] if '\n' in comment else comment
-                if '🟠' in comment:
-                    orange_lines_list.append('• ' + line.name + ' — ' + first)
-                elif '🟡' in comment:
-                    yellow_count += 1
-                elif '✅' in comment:
-                    green_count += 1
-            done_body = "✅ " + pick_names + " done. " + str(line_count) + " строк сверены, paper-truth применён.<br/>"
-            done_body += "Сумма pedido: " + str(round(pedido.amount_total, 2)) + "€."
-            if wh_name:
-                done_body += " Warehouse: " + wh_name + "."
-            done_body += "<br/><br/>"
-            if orange_lines_list:
-                done_body += "🟠 " + str(len(orange_lines_list)) + " substantial fixes:<br/>"
-                for ol in orange_lines_list:
-                    done_body += ol + "<br/>"
-                done_body += "<br/>"
-            if yellow_count > 0:
-                done_body += "🟡 " + str(yellow_count) + " minor fixes<br/>"
-            done_body += "✅ " + str(green_count) + " green: clean paper-match"
-            # Flush pending Odoo tracking messages so Claude summary gets HIGHER id (newest top)
-            env.cr.flush()
-            pedido.message_post(body=done_body, author_id=CLAUDE_AUTHOR)
-            # ===== Auto-create activity if orange/yellow/red present =====
-            if orange_lines_list or yellow_count > 0:
-                # Idempotency: skip if substantial activity уже есть
-                existing_activity = env['mail.activity'].search([
-                    ('res_model', '=', 'purchase.order'),
-                    ('res_id', '=', pedido.id),
-                    ('user_id', '=', 2),
-                ], limit=1)
-                if not existing_activity:
-                    purchase_model_id = env['ir.model'].search([('model', '=', 'purchase.order')], limit=1).id
-                    activity_note = "<p><b>" + str(len(orange_lines_list)) + " substantial fixes (orange):</b></p>"
-                    if orange_lines_list:
-                        activity_note += "<ol>"
-                        for ol in orange_lines_list:
-                            activity_note += "<li>" + ol[2:] + "</li>"
-                        activity_note += "</ol>"
-                    if yellow_count > 0:
-                        activity_note += "<p>+ " + str(yellow_count) + " minor (yellow) fixes — см. line.x_studio_item_comment.</p>"
-                    activity_note += "<p>Зелёных " + str(green_count) + " — clean paper-match, ревью не требуется.</p>"
-                    env['mail.activity'].create({
-                        'res_model_id': purchase_model_id,
-                        'res_id': pedido.id,
-                        'activity_type_id': 4,  # To-Do
-                        'user_id': 2,  # Andriy
-                        'summary': '🟠 Принять ' + str(len(orange_lines_list)) + ' substantial фиксов',
-                        'note': activity_note,
-                    })
+        # Picking-done summary message + activity — subagent делает сам после verify
+        # (см. reception_algorithm §8.5). Action 1217 v7.7 завершает только trigger/validate.
         pedido.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write({'x_studio_claude_finalize': False})
 
     except Exception as e:
