@@ -1,4 +1,4 @@
-<!-- v: 1 | updated: 2026-04-25T00:00Z -->
+<!-- v: 2 | updated: 2026-05-02T11:50Z -->
 # 07. Current state snapshot
 
 **Что в файле:** живой снимок системы — конкретные ID, цифры, состояния. Обновляется при крупных изменениях. Это «фото на сегодня», не история.
@@ -11,21 +11,25 @@
 
 | Модель | Всего | Примечание |
 |---|---|---|
-| `product.template` | **1995** | 1983 в карантине, 10 мигрированы, 12 в новом каталоге + 6 service templates + 2 eWallet (top-up + discount) |
-| `product.product` (variants) | ~2000 | в т.ч. 10 migrated variants, 2 eWallet (7857 top-up, 7862 discount), 1 archived orphan (7860) |
-| `product.category` | **80+** | + 4 новых (287 Flores Cortadas root + 288/289/290 subcat) |
-| `purchase.order` | **188** | ~90% draft с amount_total=0 (импортированные albaran без цен) |
+| `product.template` | **2142** | 2115 нормированных карточек в карантине (`categ_id child_of 207`) + 27 служебных вне карантина (eWallet/Gift Card/Deposit/Discount/Tips/Anticipo/Down Payment/Settle/DUA VAT/Booking Fees/маркер букета/делivery/2 archived legacy) |
+| `product.product` (variants) | **2144** | в основном 1:1 с template (flat), несколько multivariant |
+| `product.category` | **80+** | 287 Flores Cortadas root + 288/289/290 subcat + 207 ⛔ Карантин Holded |
+| `purchase.order` | **188** | re-imported из Holded (все state=draft, ждут reconciliation через action 1217). VERDNATURA LEVANTE SL — основной поставщик |
 | `purchase.order.line` | 1000+ | По строкам pedido |
-| `stock.move` с review-данными | **18** | IDs 461-478 |
-| `product.supplierinfo` (learned codes) | **22** | 16 старых + 6 скопированных при миграции |
-| `res.partner` (поставщики) | десятки | Видимые: Verdnatura (id=42), Serviflor (id=39) |
+| `product.supplierinfo` (learned codes) | **0** | будет наполняться при reconciliation pedidos |
+| `stock.picking` / `stock.move` / `stock.move.line` | **0** | пусто — pedidos не подтверждены |
+| `stock.quant` | **0** | пусто (был UPDATE quantity=0 + DELETE при wipe) |
+| `pos.session` / `pos.order` / `pos.payment` | **0** | пусто после wipe тестовых данных |
+| `account.move` / `account.payment` | **0** | пусто |
+| `sale.order` | **0** | пусто |
+| `loyalty.card` / `loyalty.history` | **0** | пусто (программа eWallet активна, карт ещё нет) |
+| `res.partner` | **15** | Espafloria, Andriy, 4 поставщика (SERVIFLOR 39, VERDNATURA 42, RILLO 43, DECORA 44, ParEx 57), POS Terminal 45, SCA GANADERA 49, Simplified Invoice ES 35, 🌹 Букет 53, 🤖 Claude AI 56, 2 future florist placeholders (46/47), 🚨REEMPLAZAR PROVEEDOR 38 |
 | `stock.warehouse` | **4** | Plaza (2) / Gloria (3) / Blau (4) / Temporal (5) |
 | `pos.config` | **3** | POS Plaza/Gloria/Blau — все на своих складах ✅ |
 | `res.users` (internal) | **2** | Andriy (id=2 admin) + POS Terminal (id=5 kiosk) |
-| `hr.employee` | **3** | Andriy (1), Florista Test 1 (10), Florista Test 2 (11) |
-| `pos.session` | varies | Закрываются после тестов; auto-opening_control контролировать |
+| `hr.employee` | **3** | Andriy (1), Mega Florist 1111 (10, pin 1111), 2 Florista Test (11, pin 2222) |
 | `base.automation` (активных) | **5** | Review info (1), Auto migrate v2 (6), Bouquet POS→SO (10), Bouquet dismantle picking (11), Bouquet safety net pos.order (12) |
-| `ir.actions.server` custom | **7** | 1145 (Migrate UI), 1146 (review_status), 1150 (calculate_in_shop), 1176 (Migrate execute v2.2), 1203 (Bouquet payment), 1205 (Bouquet stock.picking — automation 11/12 disabled), 1209 (Bouquet dismantle) |
+| `ir.actions.server` custom | **7+** | 1145 (Migrate UI), 1146 (review_status), 1150 (calculate_in_shop), 1176 (Migrate execute v2.2), 1203 (Bouquet payment), 1209 (Bouquet dismantle), 1217 (reconcile finalize) — все mirror в master-context/ |
 | `loyalty.program` | **1** | id=2 «eWallet», все 3 POS, EUR |
 
 ---
@@ -77,21 +81,21 @@
 | ID | name | pin | роль |
 |---|---|---|---|
 | 1 | Andriy Klymenko | false | manager |
-| 10 | 1 Florista Test | 1111 | test florist |
-| 11 | 2 Florista Test | 2222 | test florist |
+| 10 | Mega Florist 1111 | 1111 | future florist placeholder |
+| 11 | 2 Florista Test | 2222 | future florist placeholder |
 
 ---
 
 ## 5. Catalog migration state
 
-**10 мигрированных карточек** (см. [05_catalog § 8](05_catalog.md) для полной таблицы):
+После reset каталог содержит **только нормированные карточки в карантине** + 27 служебных вне карантина. Migration toolkit v2.2 (UI trigger + automation + execute) на месте, но мигрированных карточек 0 — миграция начнётся заново после готовности target skeletons.
 
 | Статус | Количество |
 |---|---|
-| В карантине (`categ_id child_of 207`) | 1983 (минус 10 ушли) |
-| `x_studio_migration_status='migrated'` (target) | 10 |
-| `active=False` + `archived` (source) | 10 |
-| В новом каталоге (не карантин) | ~22 (12 ранее + 10 мигрированных) |
+| В карантине (`categ_id child_of 207`) — нормированные карточки от Holded | **2115** |
+| Служебные вне карантина (eWallet, Gift Card, Discount, Deposit, маркер букета, Tips, Anticipo, DUA VAT, Settle, Booking Fees, delivery, archived legacy) | **27** |
+| `x_studio_migration_status='migrated'` (target) | **0** |
+| Migration toolkit (1145, 1176, automation 6, x_studio_migrate_now flag) | ✅ ready |
 
 **Category tree:**
 ```
@@ -101,7 +105,9 @@
 └── 290 Flores Variadas
 
 286 Deliveries
-207 ⛔ Карантин Holded
+291 Espafloria Internal (маркер букета 7848 + archived 7849)
+292 Embalaje
+207 ⛔ Карантин Holded — 2115 templates
 ```
 
 ---
@@ -200,12 +206,13 @@ JE 19/20/21 верифицированы (Tata 100€ + redemption 3€). См. 
 
 ---
 
-## 12. Последний реальный pedido в системе
+## 12. Pedido pipeline state
 
-- ID 34414, `Holded albaran id: AC260511 Vendor ref:12561164`
-- Supplier: VERDNATURA LEVANTE SL (id=42).
-- state: `purchase`, amount_total: 324.23 EUR.
-- date_order: 2026-03-29.
+После full reset каталога + re-import albaranes из Holded:
+- **188 purchase.order** — все 100% `state=draft`, supplier VERDNATURA LEVANTE SL (id=42).
+- Last imported ID **47995**, `Holded albaran id: AC260511 Vendor ref:12561164`.
+- 0 stock.picking / stock.move (pedidos не подтверждены).
+- 0 product.supplierinfo (учёные vendor codes будут наполняться через reconciliation action 1217 + reception_algorithm).
 
 ---
 
@@ -213,9 +220,10 @@ JE 19/20/21 верифицированы (Tata 100€ + redemption 3€). См. 
 
 1. **Make.com бот** — обрабатывает входящие документы в Telegram (активно).
 2. **Holded** — параллельно основная система (до cutover).
-3. **Odoo POS** — три кассы прошли first-sale + eWallet prepayment chain end-to-end + букетный flow (4 ветки) end-to-end.
-4. **Odoo catalog migration** — инфраструктура v2.2 работает, 10 карточек переехали.
-5. **Odoo eWallet** — программа активна, готова принимать предоплаты под букеты на заказ.
+3. **Odoo POS** — три кассы готовы (first-sale + eWallet prepayment + букетный flow ранее верифицированы end-to-end до wipe тестовых транзакций).
+4. **Odoo catalog migration** — инфраструктура v2.2 работает, готова к новому циклу миграции (после reset 0 мигрированных).
+5. **Odoo eWallet** — программа активна, ready для предоплат под букеты.
+6. **Pedido reconciliation** — 188 albaranes импортированы из Holded в state draft, ждут прогона через reception_algorithm + action 1217.
 
 ---
 
