@@ -1,4 +1,4 @@
-<!-- v: 1 | updated: 2026-05-02T19:45Z -->
+<!-- v: 2 | updated: 2026-05-02T21:10Z -->
 
 # INSTR — Запуск reception_algorithm на ОДНОМ pedido (тестовый прогон + сравнение версий)
 
@@ -53,17 +53,17 @@ search_records('purchase.order',
 
 ### Шаг 2 — найти paper PDF
 
-Ищи в `/Users/andriy/Documents/master-context/master-context/pedido.paper/verdnatura_{PEDIDO_DOCNUM}.pdf`.
+Ищи в `/Users/andriy/Documents/master-context/reception_paper/verdnatura_{PEDIDO_DOCNUM}.pdf`.
 
 ```bash
-ls /Users/andriy/Documents/master-context/master-context/pedido.paper/verdnatura_{PEDIDO_DOCNUM}.pdf
+ls /Users/andriy/Documents/master-context/reception_paper/verdnatura_{PEDIDO_DOCNUM}.pdf
 ```
 
 Если нет — стоп, owner manual.
 
 Парсинг paper:
 ```bash
-pdftotext -layout /Users/andriy/Documents/master-context/master-context/pedido.paper/verdnatura_{PEDIDO_DOCNUM}.pdf -
+pdftotext -layout /Users/andriy/Documents/master-context/reception_paper/verdnatura_{PEDIDO_DOCNUM}.pdf -
 ```
 
 Если PDF — multi-pedido bundle (Factura A126*) — извлекай секцию между `Albarán {PEDIDO_DOCNUM}` маркерами per spec §A2 в reception_algorithm.

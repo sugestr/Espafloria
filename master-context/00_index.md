@@ -1,4 +1,4 @@
-<!-- v: 1 | updated: 2026-04-25T00:00Z -->
+<!-- v: 2 | updated: 2026-05-02T21:15Z -->
 # 00. Master Index — Espafloria Odoo
 
 **Owner:** Andriy
@@ -37,6 +37,40 @@ Knowledge base для проекта автоматизации Espafloria. Це
 | — | `CHANGELOG.md` | Журнал изменений | После каждой правки |
 | — | `CLAUDE.md` | Инструкции для AI/инженера (на корне репо, не в master-context/) | Старт сессии |
 | — | `README.md` | Правила репо | Онбординг |
+
+---
+
+## Алгоритм приёмки Verdnatura
+
+| Файл | Что содержит | Когда читать |
+|---|---|---|
+| `reception_algorithm.md` | Spec алгоритма приёмки albaranes (decision tree per-line, paper-truth, MIX consolidate, pack/stem, ⛔ placeholder, color gate). Текущая prod версия — см. header `v: NN` | Любая работа с pedido reconciliation, разбор bot-ошибок, обновление алгоритма |
+| `reconcile_finalize_action.py` | Mirror prod-action 1217 (server action для finalize-флага). Реализует §B7 color gate + Phase A2 + zero-backorder | Изменения в action 1217, debug 1217 поведения |
+
+---
+
+## Инструкции для отдельных чатов (subagent prompts)
+
+Самодостаточные `.md`-инструкции которые можно скопировать в новый чат целиком. Каждая выполняет одну дискретную задачу с pilot-ом + dry-run + owner approval.
+
+| Файл | Когда использовать | Output |
+|---|---|---|
+| `INSTR_bulk_attach_paper_pdf.md` | После DB reset / Holded re-import — массово прицепить ~166 paper PDF из `../reception_paper/` к Verdnatura pedido в Odoo через `ir.attachment` + `set_binary_field` с GitHub raw URL | N attached, K pre-existing, Z unmatched, W conflicts отчёт |
+| `INSTR_run_reception_algorithm_single_pedido.md` | Тестовый прогон `reception_algorithm.md` на ОДНОМ pedido (test single, не batch). Для тестирования новых версий алгоритма + side-by-side diff с предыдущей версией | run-report в `algo_test_runs/{docNum}_{version}.md` |
+| `INSTR_wipe_test_transactions.md` | Сборник независимых рецептов для зачистки транзакционных данных (POS / sales / accounting / stock / loyalty / mail / test partners) **без** трогания каталога, pedidos, конфига, автоматизаций. Каждый блок применяется отдельно. Backup-first как основное правило | clean state по выбранным сущностям |
+
+После выбора canonical версии алгоритма (через тестовые прогоны через 2-ю инструкцию) — bulk-прогон через все pedido делается отдельным batch-промтом (создаётся при готовности).
+
+---
+
+## Snapshots / handover / audits
+
+| Файл | Что |
+|---|---|
+| `AUDIT_reception_algorithm.md` | Independent audit оригинальной версии (v12) reception algorithm: 5 BLOCKER + 11 MAJOR + 9 MINOR + 6 NIT findings |
+| `AUDIT_reception_algorithm_v14_REAUDIT.md` | Re-audit v14 после fix исходных BLOCKER. Использовать как pattern для аудита новых версий |
+| `SESSION_HANDOVER_2026-04-29.md` | Snapshot prod-state на 2026-04-29 (для сессий-наследников, кто продолжает реконсилейшн) |
+| `../reception_paper/` (папка) | 170 PDF — 166 individual albaranes (`verdnatura_<docNum>.pdf`) + 4 monthly factura bundles. Источник правды для reconciliation |
 
 ---
 
@@ -122,10 +156,12 @@ Knowledge base для проекта автоматизации Espafloria. Це
 1. **Старт сессии** → читать [99_invariants.md](99_invariants.md) (5 правил + 11 gotchas).
 2. **Большая картина** → [01_project.md](01_project.md) (бизнес, архитектура, roadmap, wishlist).
 3. **Работа по теме** → идти в тематический файл (02-08).
-4. **Перед изменениями в Odoo** → **обязательно** [99](99_invariants.md) — особенно §4 (свериться с docs 19 / community / live) и §5 (штатное перед custom).
-5. **После любого изменения** → запись в [CHANGELOG.md](CHANGELOG.md).
-6. **Скрипты с Python** → mirror `.py` файл в master-context/ (см. [99 §2](99_invariants.md)).
-7. **git commit/push** — у user'а в локальном терминале (Cowork mode не модифицирует .git/).
+4. **Reconciliation pedido** → [reception_algorithm.md](reception_algorithm.md) (spec) + [reconcile_finalize_action.py](reconcile_finalize_action.py) (prod-action mirror). Для test-прогона на 1 pedido использовать [INSTR_run_reception_algorithm_single_pedido.md](INSTR_run_reception_algorithm_single_pedido.md).
+5. **Bulk-attach paper PDF** (после DB reset) → [INSTR_bulk_attach_paper_pdf.md](INSTR_bulk_attach_paper_pdf.md).
+6. **Перед изменениями в Odoo** → **обязательно** [99](99_invariants.md) — особенно §4 (свериться с docs 19 / community / live) и §5 (штатное перед custom).
+7. **После любого изменения** → запись в [CHANGELOG.md](CHANGELOG.md).
+8. **Скрипты с Python** → mirror `.py` файл в master-context/ (см. [99 §2](99_invariants.md)).
+9. **git commit/push** — у user'а в локальном терминале (Cowork mode не модифицирует .git/).
 
 ---
 

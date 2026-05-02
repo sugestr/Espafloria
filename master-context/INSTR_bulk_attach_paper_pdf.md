@@ -1,4 +1,4 @@
-<!-- v: 1 | updated: 2026-05-02T19:30Z -->
+<!-- v: 2 | updated: 2026-05-02T21:10Z -->
 
 # INSTR — Bulk attach paper PDF к Verdnatura pedido (post-reset)
 
@@ -21,14 +21,14 @@
 
 Локально:
 ```
-/Users/andriy/Documents/master-context/master-context/pedido.paper/
+/Users/andriy/Documents/master-context/reception_paper/
 ```
 
-В репо (public GitHub): `sugestr/Espafloria` → `master-context/pedido.paper/`
+В репо (public GitHub): `sugestr/Espafloria` → `reception_paper/`
 
 Public raw URL pattern (Odoo сама их фетчит):
 ```
-https://raw.githubusercontent.com/sugestr/Espafloria/main/master-context/pedido.paper/<filename>
+https://raw.githubusercontent.com/sugestr/Espafloria/main/reception_paper/<filename>
 ```
 
 В папке ~170 файлов:
@@ -51,7 +51,7 @@ search_records('res.partner', [['name','ilike','VERDNATURA']], fields=['id','nam
 ### Шаг 1 — list PDF
 
 ```bash
-ls /Users/andriy/Documents/master-context/master-context/pedido.paper/verdnatura_*.pdf
+ls /Users/andriy/Documents/master-context/reception_paper/verdnatura_*.pdf
 ```
 
 Извлеки docNum из имени: `verdnatura_12211352.pdf` → docNum = `12211352`. Регекс `verdnatura_(\d+)\.pdf`.
@@ -120,7 +120,7 @@ att = create_record('ir.attachment', {
 # 4b — Odoo сама фетчит файл по URL
 set_binary_field(
     'ir.attachment', att['record']['id'], 'datas',
-    source=f'https://raw.githubusercontent.com/sugestr/Espafloria/main/master-context/pedido.paper/verdnatura_{docNum}.pdf'
+    source=f'https://raw.githubusercontent.com/sugestr/Espafloria/main/reception_paper/verdnatura_{docNum}.pdf'
 )
 ```
 
@@ -148,7 +148,7 @@ search_records('ir.attachment',
 create_record('mail.message', {
     'model': 'purchase.order', 'res_id': pedido_id, 'author_id': 56,
     'message_type': 'comment', 'subtype_id': 1,
-    'body': f'<p>🤖 Paper PDF attached: verdnatura_{docNum}.pdf (att id={att_id}). Источник: master-context/pedido.paper/ via GitHub raw URL.</p>'
+    'body': f'<p>🤖 Paper PDF attached: verdnatura_{docNum}.pdf (att id={att_id}). Источник: reception_paper/ via GitHub raw URL.</p>'
 })
 ```
 
