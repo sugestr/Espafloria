@@ -115,7 +115,7 @@ kb/
 
 | Файл | Назначение |
 |---|---|
-| `add/09_reception_algorithm.md` | Spec алгоритма приёмки albaranes (current **v20**, 🟢 PROD-ready) |
+| `add/09_reception_algorithm.md` | Spec алгоритма приёмки albaranes (current **v20.1**, 🟢 PROD-ready) |
 | `add/09_reception_algorithm_v1.md` | v1 baseline алгоритма (исторический, для сравнения с v20) |
 | `add/09_reception_action_1217.py` | Mirror prod-action 1217 (finalize-флаг + soft-gate + Phase A2 + ROLLBACK) |
 | `add/09_reception_handover_2026-04-29.md` | Snapshot prod-state на 2026-04-29 (operational rules + gotchas) |

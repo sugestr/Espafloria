@@ -82,7 +82,7 @@ draft (Holded import / bot Route 1)
 
 ## 5. Reception_algorithm — главный artefact
 
-**Spec:** [add/09_reception_algorithm.md](add/09_reception_algorithm.md) (current **v20**, 🟢 PROD-ready) + [add/09_reception_algorithm_v1.md](add/09_reception_algorithm_v1.md) (v1 baseline, исторический, для сравнения).
+**Spec:** [add/09_reception_algorithm.md](add/09_reception_algorithm.md) (current **v20.1**, 🟢 PROD-ready) + [add/09_reception_algorithm_v1.md](add/09_reception_algorithm_v1.md) (v1 baseline, исторический, для сравнения).
 
 **Содержит:**
 - Per-line decision tree (paper-truth, MIX consolidate, pack/stem, ⛔ placeholder, ×N inflation)

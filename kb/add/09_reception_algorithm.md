@@ -1,4 +1,4 @@
-<!-- v: 20 | updated: 2026-05-03T00:00Z -->
+<!-- v: 20.1 | updated: 2026-05-03T01:00Z -->
 # Verdnatura Reception — Agent Specification
 
 **Audience:** autonomous reconciliation agent (subagent) обрабатывающий Verdnatura albaranes 2026.
@@ -145,9 +145,11 @@ update_record('purchase.order.line', line_id, {
 Применить 4 детектора (digit-loss / lost line / extra line / substitution) к строкам. Каждый детектор — оранж + reassign/add/zero, **если бот уверен**. Если не уверен — красный (HR7).
 
 ### Step 8 — Learn supplierinfo + enrich template (§A3)
-Для каждой не-blocker строки upsert supplierinfo (paper.ref + price + uom_id + date_start). Enrich template (description_purchase, x_studio_codigo_fabrica). Mandatory chatter на template с **причиной создания** (если new card) — см. §C5.
-
-Native attributes (§A6) — placeholder, applied когда attribute setup готов.
+Для каждой не-blocker строки:
+- Upsert supplierinfo (paper.ref + price + uom_id + date_start) — §A3
+- Enrich template (description_purchase, x_studio_codigo_fabrica) — §A3.3
+- **Upsert native attributes** на template из paper sub-line (COLOR / ALTURA / MACETA / UD VENTA / etc.) — см. §A6 pipeline. ATTR_MAP константа.
+- Mandatory chatter на template с **причиной создания** (если new card) — §C5
 
 ### Step 9 — Pre-flight + hard gates (§G)
 Проверить hard gates. Если хоть один не прошёл — **НЕ trigger 1217**, легальный blocker, activity.
@@ -309,7 +311,67 @@ Card type (placeholder/quarantine/normal) **не критерий**. Не тер
 
 ### §A6 Native Odoo product.attribute mapping
 
-**Status:** PLACEHOLDER. До setup `product.attribute` в Studio — атрибуты в `description_purchase` (§A3.3). После setup — read-and-link к existing values на template, не на variant.
+**Status:** ACTIVE. Setup сделан, attributes созданы, initial values заполнены. Бот линкует на template (variants для dynamic attributes Odoo генерирует сам).
+
+**Attribute IDs (Odoo):**
+
+| paper sub-line tag | attribute_id | name | create_variant |
+|---|---|---|---|
+| `COLOR` | **11** | Color | dynamic |
+| `ALTURA` | **13** | Altura | dynamic |
+| `UD VENTA` / `FORMATO` | **14** | UD Venta | no_variant |
+| `MACETA` | **15** | Maceta | dynamic |
+| `Nº FLORES` | **16** | Nº Flores | dynamic |
+| `Nº TALLOS` | **17** | Nº Tallos | no_variant |
+| `TAMAÑO BOTON` / `TAMAÑO BOTÓN` | **18** | Tamaño Botón | no_variant |
+| `BOTON MINIMO` / `BOTÓN MÍNIMO` | **19** | Botón Mínimo | no_variant |
+| `BOTÓN` (Si/No) | **20** | Botón | no_variant |
+| `DIAMETRO` / `DIÁMETRO` | **21** | Diámetro | dynamic |
+| `PESO/TALLO` | **22** | Peso/Tallo | no_variant |
+| `TAMAÑO FLOR` | **23** | Tamaño Flor | dynamic |
+| `LONGITUD BROTE` | **24** | Longitud Brote | no_variant |
+| `ANCHO SUPERIOR` | **25** | Ancho Superior | no_variant |
+| `ANCHO INFERIOR` | **26** | Ancho Inferior | no_variant |
+| `GROSOR` | **27** | Grosor | no_variant |
+| `PESO` (без TALLO) | **28** | Peso | no_variant |
+
+**Synonyms** (нормализуй при парсинге paper sub-line):
+- `UD VENTA` ≡ `FORMATO` → attribute Ud Venta (id=14)
+- `TAMAÑO BOTON` ≡ `TAMAÑO BOTÓN` → attribute Tamaño Botón (id=18)
+- `BOTON MINIMO` ≡ `BOTÓN MÍNIMO` → attribute Botón Mínimo (id=19)
+- `DIAMETRO` ≡ `DIÁMETRO` → attribute Diámetro (id=21)
+
+**Pipeline (per paper line, в Step 8):**
+
+```python
+# 1. парсим sub-line
+parsed = parse_paper_subline(line)  # {"COLOR": "Verde", "ALTURA": "70 cm", "Nº FLORES": "5"}
+
+# 2. для каждого attribute:
+for tag, raw_value in parsed.items():
+    attr_id = ATTR_MAP.get(normalize(tag))  # из таблицы выше
+    if not attr_id: continue  # неизвестный тег — log + skip
+    
+    # 3. найти/создать value (для dynamic — на лету; для no_variant — тоже)
+    val = search_or_create('product.attribute.value',
+        domain=[['attribute_id','=',attr_id], ['name','=',raw_value]],
+        defaults={'attribute_id': attr_id, 'name': raw_value})
+    
+    # 4. убедиться что у template есть attribute_line с этим val
+    line_rec = search('product.template.attribute.line',
+        [['product_tmpl_id','=',tmpl_id], ['attribute_id','=',attr_id]], limit=1)
+    if not line_rec:
+        create('product.template.attribute.line', {
+            'product_tmpl_id': tmpl_id,
+            'attribute_id': attr_id,
+            'value_ids': [(4, val.id)]
+        })
+    elif val.id not in line_rec.value_ids.ids:
+        line_rec.write({'value_ids': [(4, val.id)]})
+    # variants для dynamic attributes Odoo пересчитает сам
+```
+
+ATTR_MAP — константа в коде агента из таблицы выше.
 
 ---
 
@@ -377,9 +439,15 @@ Action: Variant A — найти existing distinct card OR create new (§A5) + r
 ### §B2 Quantity decision (per line)
 
 #### Detect pack/stem
+
+**`UD VENTA Paquete` (или `FORMATO Paquete`) на бумаге = STRONGEST signal.** Это явное заявление поставщика «эта строка в пачках». Используется как top-priority gate в обе стороны:
+- **Активирует pack treatment** даже если ratio paper.qty vs Odoo.qty всего ×2-×3
+- **БЛОКИРУЕТ digit-loss detector** (§F2 Type 1) — если UD VENTA Paquete присутствует, расхождение qty это pack confusion, а не потеря разряда
+
 ```python
 is_pack = (
-    'UD VENTA Paquete' in paper.attributes
+    'UD VENTA Paquete' in paper.attributes  # STRONGEST — поставщик явно сказал «пачки»
+    OR 'FORMATO Paquete' in paper.attributes  # синоним UD VENTA
     OR known_pack_product(concepto)  # Mimosa, Skimmia, EUC, Lentisco, Acacia, Ranunculus pequeño, etc.
     OR (existing supplierinfo for ref имеет uom Paquete)
     OR (paper.qty vs Odoo.qty имеют ratio ≥3 без явных stem signals)
@@ -690,7 +758,7 @@ else (color == 0): fallback по qty delta vs MINOR_THRESHOLD
 
 | # | Тип | Detection | Action | Color |
 |---|---|---|---|---|
-| 1 | **Digit-loss** (потерял разряд) | `paper.qty > 10 * Odoo.qty` AND identity match strong (`paper.qty / Odoo.qty ≈ 10`) | paper-truth: `product_qty=paper.qty`. Activity «🟡 поправил X→Y, бухгалтер потерял разряд». **Yellow silent**, gate проходит | 🟡 yellow |
+| 1 | **Digit-loss** (потерял разряд) | `paper.qty > 10 * Odoo.qty` AND identity match strong (`paper.qty / Odoo.qty ≈ 10`) **AND `UD VENTA Paquete` / `FORMATO Paquete` отсутствует** на бумаге (иначе это pack confusion, не digit-loss — §B2) | paper-truth: `product_qty=paper.qty`. Activity «🟡 поправил X→Y, бухгалтер потерял разряд». **Yellow silent**, gate проходит | 🟡 yellow |
 | 2 | **Lost line** (потерял строку) | После positional match есть unmatched paper line + identity ясен (по supplierinfo / fuzzy concepto) | Создать новую `purchase.order.line` на найденную card. Activity «🟠 добавил строку которую бухгалтер потерял» | 🟠 orange |
 | 3 | **Extra line** (нарисовал лишнее) | Odoo line не имеет paper-аналога AND нет evidence что это reasonable дубль | Set qty=0 на лишней Odoo-строке. Activity «🟠 обнулил лишнюю строку» | 🟠 orange |
 | 4 | **Substitution by coincidence** (подмена по случайному совпадению) | Identity gate fails, но qty/name совпадают подозрительно близко (например бухгалтер положил OZOTHAMNUS, бумага F Arroz Pink) | Reassign product_id на бумажный (если бот **уверен** что нашёл правильную карту в каталоге). Activity «🟠 поправил подмену X→Y» | 🟠 orange |
