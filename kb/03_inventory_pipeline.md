@@ -1,4 +1,4 @@
-<!-- v: 2 | updated: 2026-05-02T23:30Z -->
+<!-- v: 3 | updated: 2026-05-03T00:00Z -->
 # 03. Inventory pipeline — приёмка и bill control
 
 **Что в файле:** техдок приёмки (`stock.picking` / `stock.move` слой, review-status, calculate_in_shop, sentinel -1) + bill control policy (`purchase` vs `receive`) + backorder logic. **Reconciliation слой** (бот + `purchase.order.line`) — отдельно в [02_makecom_bot.md](02_makecom_bot.md).
@@ -250,17 +250,9 @@ for record in self:
 
 ---
 
-## 10. Кастомные поля на `purchase.order.line` (5 штук)
+## 10. Кастомные поля на `purchase.order.line`
 
-| Поле | Тип | Назначение |
-|---|---|---|
-| `x_studio_expected_qty` | float | Оценка логиста |
-| `x_studio_item_comment` | char | Лог reconciliation от бота (см. [02_bot § Line-log шаблоны](02_makecom_bot.md)) |
-| `x_studio_operator_hit` | char | Ручная подсказка для LLM-reconciliation |
-| `x_studio_supplier_product_name` | char | Название с бумаги (заполняется ботом) |
-| `x_studio_supplier_sku` | char | SKU с бумаги (заполняется ботом) |
-
-**Удалено:** `x_studio_expected_qty_2` (мусорное).
+5 полей (`x_studio_expected_qty`, `x_studio_item_comment`, `x_studio_operator_hit`, `x_studio_supplier_product_name`, `x_studio_supplier_sku`) — это домен pedido (заполняются ботом/агентом во время reconciliation). Полная таблица + описание — в [09_pedido § 8.1](09_pedido.md).
 
 ---
 

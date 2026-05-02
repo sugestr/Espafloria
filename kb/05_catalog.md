@@ -1,4 +1,4 @@
-<!-- v: 3 | updated: 2026-05-02T23:30Z -->
+<!-- v: 4 | updated: 2026-05-03T00:00Z -->
 # 05. Каталог и миграция (v2.2)
 
 **Что в файле:** migration toolkit v2.2 (UI trigger + execute + automation), 4 правила миграции (бывшие §20-23 в старом 99), category tree, ID-registry мигрированных карточек (пусто после reset), validation matrix (исторические тесты toolkit), post-migration procedures, rollback. Структуры карточек и кастомные поля Holded — здесь же.
@@ -169,6 +169,21 @@ target_is_flat = len(target_template.product_variant_ids) == 1
 **Почему так:** POS тайлы читают template-level image для flat, variant-level для multivariant — чтобы варианты отличались визуально на кассе.
 
 **Toolkit верифицирован на flat→flat** (см. §9 Validation matrix). Multivariant target ещё не тестировался — ждёт первую multivariant-миграцию (Rosa Red Naomi с attributes 40/50/60 cm).
+
+---
+
+## 5.5. Карта = один реальный товар (distinct codigos rule)
+
+**Правило:** одна `product.template` = **один реальный товар**. Нельзя сливать дорогую и дешёвую разновидности под одну карту через `product.supplierinfo`, даже если у них похожее название.
+
+**Пример:** Monstera Variegata Thai Constellation (200€/шт) и Monstera обычная (5€/шт) — это **разные товары**, должны быть на **разных картах** с **разными codigos**. Если бухгалтер в Holded сматчил оба на одну Odoo карточку — это ошибка, разделяем.
+
+**How to apply:**
+- Перед добавлением нового `product_code` в `supplierinfo` — проверить ценовой диапазон карты. Если paper price отличается **>×1.5** от существующих supplierinfo на карте — сигнал что paper ссылается на ДРУГОЙ товар → нужна distinct card.
+- При reconcile если paper встречает два варианта Verdnatura Refs с сильно разными ценами под одним общим именем — НЕ объединять. Создавать карты раздельно.
+- Reassign карточки между Odoo lines — высокий риск, всегда **flag для ревью owner**.
+
+См. также `add/09_reception_algorithm.md §B1b` (Distinct cards split — Variant A) — детальный decision tree для агента.
 
 ---
 

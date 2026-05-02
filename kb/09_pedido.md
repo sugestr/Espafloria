@@ -1,4 +1,4 @@
-<!-- v: 1 | updated: 2026-05-02T23:30Z -->
+<!-- v: 2 | updated: 2026-05-03T00:00Z -->
 # 09. Pedido — работа с purchase orders
 
 **Что в файле:** домен `purchase.order` (закупки у поставщиков): источники, жизненный цикл, reconciliation paper PDF ↔ Odoo, action 1217 finalizer, supplierinfo learning, partner_id Verdnatura. Reception_algorithm — главный artefact в `add/09_reception_algorithm.md`.
@@ -93,6 +93,17 @@ draft (Holded import / bot Route 1)
 
 **Test runs** на одном pedido — через [add/09_reception_INSTR_test_run.md](add/09_reception_INSTR_test_run.md). Bulk-run через всё — отдельный promp ещё не написан.
 
+### ⚠️ Red flag: ×N inflation > 2 — проверять pack/stem ПЕРЕД paper-truth
+
+При дельте `Odoo_qty / paper_qty > 2` **НЕ применять paper-truth слепо**. Сначала:
+1. Paper UD VENTA — содержит ли «Paquete»? Если да — paper qty в paquetes, не stems.
+2. Odoo `product_uom` — какой unit на purchase.order.line (Tallo/Unidades vs Paquete id=31).
+3. **Match check:** если paper UD=Paquete и Odoo unit=stem с совпадающим ratio (Odoo qty ≈ paper qty × stems_per_paq) — **Holded бухгалтер ПРАВ**, он раскрыл паки и пересчитал стебли. Не переписывай qty.
+
+**Историческая ошибка:** SKIMMIA Yuki ×8 на pedido 12267946 (29 апреля 2026) — agent переписал Odoo qty с 40→5 «по paper-truth», получив × 8 inflation. На самом деле paper говорил 5 paquetes, Odoo бухгалтер забил 40 stems (ratio 8 stems/paq) — корректный recount после открытия паков. Применение paper-truth → склад остался с 5 stems вместо 40. Owner поймал, велел rollback.
+
+Полный decision tree (4 ветви pack/stem) — в [add/09_reception_algorithm.md §A](add/09_reception_algorithm.md) «Pack-conversion alone» + §B detect pack/stem.
+
 ---
 
 ## 6. Action 1217 (`x_studio_claude_finalize`)
@@ -111,6 +122,12 @@ draft (Holded import / bot Route 1)
 
 **Soft-gate:** дельта между paper qty и Odoo qty по строке ≤ 5 stems = auto-OK. > 5 — review_status≠OK → блок Validate.
 
+### ⚠️ Ограничения 1217
+
+- **Не работает на `state=purchase`.** Pre-flight жёстко проверяет `state=='draft'`. Если pedido частично подтверждён (Phase A прошла, picking создан, но gate отвалил) — flip flag не помогает. Нужен либо ручной Validate в UI, либо отдельный «validate-only» server action.
+- **Не различает minor variance.** Final gate отвергает любой `x_studio_review_status` кроме префикса `OK*`. Параллельная automation 1146 пишет «от бумаги ±N» при дельте — gate стоит насмерть. Workaround: для minor variance (≤ 2 stems) Phase A пишет `x_studio_expected_qty=paper_qty` чтобы gate не запутался.
+- `safe_eval` ограничения: нет `STORE_ATTR`, `hasattr`, `__name__` — везде используется `.write({})` вместо attribute set.
+
 ---
 
 ## 7. Reconciliation: bot vs algorithm
@@ -124,20 +141,27 @@ draft (Holded import / bot Route 1)
 
 ---
 
-## 8. Кастомные поля pedido (`purchase.order.line`)
+## 8. Кастомные поля pedido
 
-5 полей — см. [03_inventory_pipeline.md § 10](03_inventory_pipeline.md). Заполняются ботом / агентом во время reconciliation:
+### 8.1 На `purchase.order.line` (5 полей)
 
-| Поле | Назначение |
-|---|---|
-| `x_studio_expected_qty` | Оценка логиста / физический recount бухгалтера |
-| `x_studio_item_comment` | Лог reconciliation (Make.com line-log шаблоны) |
-| `x_studio_operator_hit` | Ручная подсказка для LLM-reconciliation |
-| `x_studio_supplier_product_name` | Название с бумаги |
-| `x_studio_supplier_sku` | SKU с бумаги |
+Заполняются ботом / агентом во время reconciliation:
 
-На уровне pedido (header):
+| Поле | Тип | Назначение |
+|---|---|---|
+| `x_studio_expected_qty` | float | Оценка логиста / физический recount бухгалтера |
+| `x_studio_item_comment` | char | Лог reconciliation от бота (см. [02_makecom_bot § Line-log шаблоны](02_makecom_bot.md)) |
+| `x_studio_operator_hit` | char | Ручная подсказка для LLM-reconciliation |
+| `x_studio_supplier_product_name` | char | Название с бумаги (заполняется ботом) |
+| `x_studio_supplier_sku` | char | SKU с бумаги (заполняется ботом) |
+
+**Удалено:** `x_studio_expected_qty_2` (мусорное).
+
+### 8.2 На `purchase.order` (header)
 - `x_studio_claude_finalize` (bool) — триггер action 1217.
+
+### 8.3 На `stock.move` (related fields, 9 штук)
+См. [03_inventory_pipeline § 2](03_inventory_pipeline.md) — это уже stock-side слой приёмки.
 
 ---
 

@@ -1,4 +1,4 @@
-<!-- v: 2 | updated: 2026-05-02T23:30Z -->
+<!-- v: 3 | updated: 2026-05-03T00:00Z -->
 # 04. POS, букеты, eWallet, роли, бонусы, CRM
 
 **Что в файле:** техдок всего, что вокруг кассы. **Букеты — полная архитектура** (reserve-model v2). **eWallet — полная бухгалтерская и operational механика.** Роли (флорист/логист/бухгалтер). Бонусная модель. CRM. Всё, что в документе на 2026-04-25.
@@ -32,6 +32,8 @@
 **Cash per-POS — требование Odoo:** каждая касса свой cash-метод (constraint), GL `570001 Efectivo` общий, разные journal codes для per-POS bookkeeping.
 
 **⚠️ Опечатка:** id=5 = `Efectivo Blaus` (лишняя s). Journal `Efectivo Blau` правильный. Cosmetic fix.
+
+**⚠️ Создание новых `pos.payment.method` через MCP/API:** поле `outstanding_account_id` не валидируется на API-уровне (можно `create_record` без него), но **required в UI** при первом открытии формы. Если создать без него — UI form не откроется до явной правки. Для technical методов (Bouquet Internal и т.п.) — обычно тот же account, что `journal_id.default_account_id` (например `555000 Items pending application`); для bank/card — transit account 572xxx; для cash — 570xxx. **Всегда выставлять явно сразу после create.**
 
 **Cuenta de cliente vs eWallet** — разные механики:
 - **Cuenta de cliente** (id=3, `pay_later`) = в долг. Клиент уносит, оплата на партнёре как `account.receivable`, гасится отдельной транзакцией. Штатный Odoo flow для постоплаты.
@@ -161,6 +163,9 @@ Service product, default 5€ IVA 10%. Бизнес-логика:
 ### 2.7. Скидка — на уровне букета, не на строках
 
 Скидка применяется на уровне букета (общий `discount` на финальной строке), **не на компонентах**. Скидка по строкам компонентов «неудобно и недостоверно» — решение владельца.
+
+**Жёсткое правило ценообразования компонентов букета:** компоненты SO **всегда** идут по своим обычным ценам (`list_price` или `pricelist_price`), **никогда не 0€**. Подгон под итоговую сумму — **только** через общую скидку % на SO или корректирующую строку.
+**Why:** компоненты по 0€ ломают аналитику маржи — теряется per-item revenue, средняя цена розы становится ложной, маркетинг и закупки получают мусорные цифры. Применяется к любому SO с компонентами букета: offline reserve-model, online WhatsApp, marketplace.
 
 **⚠️ Gotcha при создании SO с line discount:** `sale.order.line.discount` перезатирается на create из-за pricelist onchange. После create делать `.write({'discount': X})` на линиях. См. [99 §G11](99_invariants.md).
 

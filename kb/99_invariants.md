@@ -1,4 +1,4 @@
-<!-- v: 10 | updated: 2026-05-02T23:30Z -->
+<!-- v: 11 | updated: 2026-05-03T00:00Z -->
 # 99. Invariants — железные правила проекта
 
 **Читать перед любыми изменениями в системе.** Нарушение этих правил создаёт техдолг, ломает бот или теряет данные.
@@ -30,11 +30,14 @@
 
 Жёсткие триггеры миграции — только когда хотелка физически невозможна на Online. Сейчас единственный жёсткий драйвер — photo capture в POS UI (требует custom OWL widget). См. [add/04_pos_audit_2026-04-25.md](add/04_pos_audit_2026-04-25.md).
 
-### 4. Перед утверждением поведения Odoo — свериться с docs 19 / community / live-базой
-**Не утверждать из памяти/тренировки.** Odoo 19 ≠ 17/18 во многих местах. Сверять:
+### 4. Перед утверждением поведения внешних API / Odoo — свериться с docs / live
+**Не утверждать из памяти/тренировки.** Odoo 19 ≠ 17/18 во многих местах. То же правило применяется к **любым внешним API** (Holded, Make.com, etc.) — verify before assert.
+
+**Что проверять:**
 - [Odoo 19 docs](https://www.odoo.com/documentation/19.0/)
 - live Odoo через MCP (`server_info`, `list_models`, проверка полей и API)
 - community: [Odoo Forum](https://www.odoo.com/forum), [OCA repos](https://github.com/OCA)
+- Для Holded / других внешних: official developer docs + tool definitions подключённого MCP + 1-2 test call'а перед bulk
 
 **Подкреплено инцидентами:** state machine POS (нельзя `write({'state':'closed'})` — ломает computed; нужен штатный `action_pos_session_close`); `stock.return.picking` API (нет `location_id` в vals, нужен `.sudo()`); `sale.order.line.discount` перезатирается на create (нужен `.write({'discount':...})` после).
 
