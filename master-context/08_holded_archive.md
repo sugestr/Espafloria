@@ -1,21 +1,25 @@
-<!-- v: 1 | updated: 2026-04-25T00:00Z -->
-# 08. Holded archive — бета-миграция и .py исходники
+<!-- v: 2 | updated: 2026-05-02T19:30Z -->
+# 08. Holded archive — миграция каталога и .py исходники
 
-**Что в файле:** архивный документ бета-миграции из Holded + Python-исходники одноразовых скриптов (image import, CSV split). **Это история бета-фазы — не активная работа.** Когда дойдём до боевой миграции под cutover, повторим заново с этим как baseline.
+**Что в файле:** документ миграции каталога из Holded в Odoo Online + Python-исходники одноразовых скриптов (image import, tax fix). Используется как baseline для боевого cutover.
 
 > 📌 **Holded остаётся как архив старых записей** до финального cutover. Финал cutover см. [01_project § 6 этап 7](01_project.md).
 
 ---
 
-## 1. Что было сделано в бете (на 2026-04-19)
+## 1. Текущее состояние карантина (на 2026-05-02)
 
 | Сущность | Количество | Статус |
 |---|---|---|
-| Категории | 79 под `⛔ Карантин Holded` (id=207) | ✅ |
-| Карточки товара (templates) | 1983 в карантине + 10 служебных + 12 новых | ✅ |
-| Фото товаров | основные главные фото загружены | ✅ |
+| Категории под `⛔ Карантин Holded` (id=207) | 79 | ✅ |
+| Карточки товара (templates) | ~2106 | ✅ |
+| └ Holded flat templates | 2025 | ✅ |
+| └ VBOX варианты (flat-импорт) | 81 (21 parent × 2-6 size) | ✅ |
+| Фото на карточках | ~119 (38 parex/holded + 81 variants) | ✅ |
+| Налоги (sale + purchase, EU intracomunitario) | ✅ настроены | ✅ |
+| `sale_ok=False` на всём карантине | ✅ применено | ✅ |
 | Botanical tags | штатные `product.tag` | ✅ |
-| Albaran / pedido | 188 импортированы (~90% draft без цен) | 🟡 |
+| Albaran / pedido | 173 historical в backlog | 🟡 |
 
 ---
 
@@ -58,25 +62,46 @@
 
 ## 3. Tax mapping (financial formulas)
 
-| Holded (%) | Sales Tax ID | Purchase Tax ID |
+### 3.1. Domestic (испанский поставщик)
+
+| Тип | Sales | Purchase |
 |---|---|---|
-| 21% | 5 | 7 |
-| 10% | 82 | 68 |
-| 5% | — | 62 |
-| "topt" | — | 62 |
+| 21% Goods | 5 | 7 |
+| 21% Service | 6 | 8 |
+| 10% Goods | 82 | 68 |
+| 10% Service | 98 | 70 |
+| 0% Service | 89 | 56 |
+| 5% / "topt" | — | 62 |
 
-**⚠️ Отличается от Make.com бота:** там бот различает services vs goods:
-- 10% service → 70, good → 68
-- 21% service → 8, good → 7
+### 3.2. EU intracomunitario (поставщик из ЕС, не Испания)
 
-Полная таблица:
-- Sales 21% → 5
-- Sales 10% → 82
-- Purchase 21% goods → 7
-- Purchase 21% services → 8
-- Purchase 10% goods → 68
-- Purchase 10% services → 70
-- Purchase 5% / topt → 62
+**Sale tax** — всегда испанский domestic (продажа физлицам в Барселоне). EU/EX префикс на sale **НЕ нужен**.
+
+**Purchase tax — EU prefix обязателен** для intracomunitario (reverse charge):
+
+| Тип | Purchase EU |
+|---|---|
+| 21% EU Goods | **10** |
+| 21% EU Service | 9 |
+| 10% EU Goods | 20 |
+
+**Применение:** При оприходовании bill'а от EU-поставщика Odoo генерит self-account input + output VAT (Modelo 303), запись в Modelo 349. Чистый эффект на P&L = 0 (НДС обнуляется).
+
+**Текущие EU-поставщики:**
+- Parex / SHISHI AS (Эстония, Tallinn) — все 831 parex карточки на `21% EU G`
+
+### 3.3. Спец. карточки (non-holded)
+
+| Карточка | Sales | Purchase |
+|---|---|---|
+| 🌹 Работа по сборке букета (id=7848) | 98 (10% S) | 70 (10% S) |
+| Standard delivery, POS Discount | 82 (10% G) | 68 (10% G) |
+| eWallet, Gift Cards, Anticipo | 89 (0% S) | 56 (0% S) |
+| REDONDEO (POS) | 89 (0% S) | 56 (0% S) |
+
+### 3.4. Invariant: sale_rate = purchase_rate
+
+Per [99_invariants.md], для каждой карточки `sale tax %` ДОЛЖЕН совпадать с `purchase tax %` (исключая EU/domestic mix, где % одинаковый, отличается только префикс EU). Проверка quick-test'ом по export'у — 0 mismatches.
 
 ---
 
@@ -115,20 +140,60 @@
 
 ## 5. Маппинги полей при импорте
 
-### 5.1. Template import
+### 5.1. Template import (flat карточки)
 
-| Odoo поле | Источник |
-|---|---|
-| `id` | External ID = `holded_<holded_id>` |
-| `name` | Name из Holded |
-| `default_code` | Internal Reference (SKU) |
-| `barcode` | Barcode |
-| `categ_id/id` | Category External ID |
-| `supplier_taxes_id/.id` | Purchase Taxes / **Database ID** |
-| `taxes_id/.id` | Sales Taxes / **Database ID** |
-| `image_1920` | Main image (base64, через CSV) |
-| `x_studio_codigo_fabrica` | Значение из Holded |
-| `x_studio_holded_url` | Ссылка на Holded |
+| Odoo поле | Источник | Важное |
+|---|---|---|
+| `id` | External ID = `holded_<holded_id>` | Odoo сам префиксит `__import__.` |
+| `Name` | Name из Holded | заглавная N в импорте |
+| `default_code` | Internal Reference (SKU) | **lookup-ключ для pedido/sale** |
+| `barcode` | Barcode | вторичный lookup |
+| `categ_id/id` | Category External ID | через external ID |
+| `supplier_taxes_id/.id` | Purchase Taxes / **Database ID** | EU id=10/20 для parex |
+| `taxes_id/.id` | Sales Taxes / **Database ID** | sale всегда domestic |
+| `image_1920` | Main image (base64) | XLSX лучше CSV для emoji |
+| `Description` | стандартный multi-line формат (см. §5.4) | заглавная D |
+| `x_studio_codigo_fabrica` | Codigo de fabrica из Holded | для bot fallback-матчинга |
+| `x_studio_holded_url` | https://app.holded.com/products/{id} | trace |
+| `x_studio_holded_created` | dd/mm/yyyy (из MongoDB ObjectId timestamp) | trace |
+| `Sales` (sale_ok) | **False** для карантина | `sale_ok=True` ломает POS-каталог |
+| `Purchase` (purchase_ok) | True | для оприходования |
+| `Active` | True | |
+| `Product Type` | Goods | |
+| `Track Inventory` | True | |
+
+### 5.1.1. Ключевой invariant: lookup matching для будущих pedido/sale
+
+`default_code` (Internal Reference) — **главный ключ matching'а** при импорте pedido/sale из Holded. Любой вариант/размер должен иметь **уникальный** SKU точно как в Holded источнике (`46562-V25`, `4741293465591-14`).
+
+### 5.1.2. Variant flat-import (вместо Odoo-нативных variants)
+
+Для Holded карточек с вариантами (color/size sets — VBOX боксы и т.д.):
+- **Каждый вариант = отдельный flat product.template** (не product.product вариант)
+- Уникальный `default_code` = variant SKU из Holded (`46562-V25`)
+- Уникальный `barcode` = variant barcode из Holded (`V25-BoxRound3.rndtube`)
+- Parent описывается в `Description` ("Variante V25cm del set 46562 (1 из 3 en el set)")
+- External ID = `holded_<parent_id>_V<size>`
+- Cost = set_cost / N (per-component split, обычно уже сделано в Holded)
+
+**Phantom BOM (mrp module)** — отложен до сборки чистого каталога. Сейчас flat-подход проще и достаточен для pedido/sale matching.
+
+### 5.1.3. CSV vs XLSX encoding gotcha (КРИТИЧНО)
+
+CSV с эмодзи (🚫, ✅) или кириллицей **ломаются Odoo auto-detect** — кодировка определяется как "johab"/Latin-1, UTF-8 байты декодируются как мусор (🚫 → "ðŸš«"). После такого импорта name поля каждой карточки записаны искажёнными.
+
+**Решение:** для любых данных с эмодзи/кириллицей использовать **XLSX**, не CSV. Excel хранит unicode нативно. Все файлы импорта связанные с карантинными названиями — XLSX.
+
+**Workaround если уже сломано:** сделать XLSX restoration с `id` + правильным `Name` (без emoji-corruption), импортнуть → имена восстановятся.
+
+### 5.1.4. Update без перезаписи лишнего
+
+Импорт колонок ТОЛЬКО которые меняются. Например:
+- Налоги поправить → `id` + `taxes_id/.id` + `supplier_taxes_id/.id` (без `Name`!)
+- Фото добавить → `id` + `image_1920` (без `Name`!)
+- Описание → `id` + `Description`
+
+Включение лишних колонок (особенно `Name` с эмодзи) рискует encoding bug'ом и перезаписью.
 
 ### 5.2. Purchase line import: albaran → pedido
 
@@ -140,6 +205,24 @@ order_line/product_qty      → Quantity
 order_line/name             → Custom Description
 order_line/price_unit       → Price
 ```
+
+С flat-подходом (см. 5.1.2) `product_id` = template's auto-generated `product.product` (1 variant per template). Match по SKU работает.
+
+### 5.3. Mass update through MCP
+
+Для bulk-fix полей (sale_ok=False на всём карантине, налоги, etc.) — `mcp__odoo__update_records` (плюральный) принимает list of IDs + values. До 1000 за раз. Альтернатива — `ir.actions.server` с raw write + self-delete (см. CHANGELOG history).
+
+### 5.4. Description формат (стандартный для карантина)
+
+```
+Codigo de fabrication: <factory_code>
+Holded Creado: <dd/mm/yyyy>
+Link: https://app.holded.com/products/<holded_id>
+<Variante V<size>cm del set <parent_sku> (1 из N en el set)>  ← только для variants
+Parex: <5-digit_short_code>  ← если совпадает с parex.csv
+```
+
+Сгенерирован через формулу из Google Sheets или Python из xlsx-источника.
 
 ---
 

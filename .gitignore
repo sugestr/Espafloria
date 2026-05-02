@@ -1,0 +1,28 @@
+# macOS
+.DS_Store
+**/.DS_Store
+
+# One-shot import artefacts (CSV/XLSX генерируемые в сессиях)
+holded_*.csv
+holded_*.xlsx
+restore_*.csv
+restore_*.xlsx
+variants_*.csv
+variants_*.xlsx
+*_fix*.csv
+*_fix*.xlsx
+
+# Session logs (см. CHANGELOG для истории сессий)
+master-context/p0_*.log
+master-context/p1_*.log
+master-context/pdf_attach_*.log
+
+# Stale planning JSONs (одноразовые snapshot'ы перед массовыми операциями)
+master-context/post_reset_*.json
+master-context/tax_audit_*.json
+master-context/parex_skus.json
+
+# Python cache
+__pycache__/
+*.pyc
+.venv/
