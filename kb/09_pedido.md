@@ -1,0 +1,187 @@
+<!-- v: 1 | updated: 2026-05-02T23:30Z -->
+# 09. Pedido — работа с purchase orders
+
+**Что в файле:** домен `purchase.order` (закупки у поставщиков): источники, жизненный цикл, reconciliation paper PDF ↔ Odoo, action 1217 finalizer, supplierinfo learning, partner_id Verdnatura. Reception_algorithm — главный artefact в `add/09_reception_algorithm.md`.
+
+**Status:** 🟡 READY — 188 pedido draft в системе после Holded re-import (2026-05-02), все state=draft, supplierinfo=0. Ждут прогона через reception_algorithm + action 1217.
+
+---
+
+## 1. Что такое pedido
+
+**Pedido** = `purchase.order` в Odoo (= заказ поставщику, исп. albarán/factura). Каждый pedido имеет:
+
+- `partner_id` — поставщик (Verdnatura=42, Serviflor=39, Rillo=43, Decora=44, ParEx=57)
+- `partner_ref` — vendor reference (номер документа поставщика)
+- `name` — внутренний номер Odoo (`P00188` или Holded import format `Holded albaran id: AC260511 Vendor ref:12561164`)
+- `order_line` — строки с product_id, qty, price
+- `state` — `draft` / `sent` / `purchase` / `done` / `cancel`
+- `picking_ids` — связанные `stock.picking` (приёмки)
+- Custom поля: `x_studio_claude_finalize` (триггер action 1217)
+
+---
+
+## 2. Источники pedido
+
+### 2.1. Holded import
+Bulk import из Holded (старая ERP). После reset 2026-05-02 — **188 pedido импортированы**, все Verdnatura, state=draft. Lines заполнены price/qty/product_id из Holded ETL (через xlsx с External ID lookup `holded_<id>` для product.template + auto-generated `product.product` variant).
+
+**Ограничения Holded import:**
+- Нет цен в фактуре Verdnatura (цены в albaran отдельно) → Holded цены ненадёжны.
+- Placeholder lines для unmatched SKUs (`product_id=10` «НОВЫЙ ТОВАР»).
+- Holded amount=0 на некоторых lines (бухгалтер не заполнил).
+
+### 2.2. Make.com Telegram bot — Route 1
+Через бот OCR + LLM создаёт pedido с нуля если не найден по `(supplier_vat, document_number)`. См. [02_makecom_bot.md § 5.4](02_makecom_bot.md). Сейчас не используется для Verdnatura (все 188 уже импортированы), Route 1 — для новых поставщиков / новых документов.
+
+### 2.3. Manual create
+Через Odoo UI — для разовых закупок мелких поставщиков.
+
+---
+
+## 3. Жизненный цикл pedido (Verdnatura)
+
+```
+draft (Holded import / bot Route 1)
+   │
+   ├─→ Reconciliation:
+   │      • Make.com bot Route 2 — обогащает строки на price/qty/comment, учит supplierinfo
+   │      • Reception_algorithm (Claude agent) — paper-truth reconciliation на основе PDF
+   │
+   ├─→ Phase A writes (price_unit / product_qty / x_studio_supplier_sku / x_studio_supplier_product_name / x_studio_expected_qty / x_studio_item_comment)
+   │
+   ├─→ x_studio_claude_finalize=True → action 1217 (через base.automation 15)
+   │      • button_confirm() → state=purchase, создаёт picking
+   │      • Phase A2 — quantity write на stock.move
+   │      • Soft-gate (≤5 stems delta) → если OK, button_validate
+   │      • Picking → state=done
+   │      • Chatter summary + activity (если orange/yellow/red lines)
+   │
+   └─→ purchase + picking done = closed
+```
+
+**ROLLBACK ветка** (`note` содержит `ROLLBACK_HOLDED_API`) — откат закрытых-без-бумаги pedidos через `stock.return.picking`. См. [add/09_reception_action_1217.py](add/09_reception_action_1217.py).
+
+---
+
+## 4. Источник истины при reconciliation
+
+**Paper PDF от Verdnatura = единственная истина** (см. [01_project § 4.1](01_project.md), [99_invariants](99_invariants.md)).
+
+| Источник | Что брать | Что игнорировать |
+|---|---|---|
+| Paper PDF | refs, qty, price, IVA, total | — |
+| Holded import (Odoo lines) | product_id (на какую карту положили), `x_studio_expected_qty` (физический recount бухгалтера) | price, line.name, supplier_sku — **ненадёжны** |
+| Algorithm decisions | переписывает что нужно, оставляет что верно | — |
+
+**Hard rule:** без скачанного paper PDF — **не закрываем** pedido. См. [add/09_reception_handover_2026-04-29.md § 2.1](add/09_reception_handover_2026-04-29.md).
+
+**Где живёт paper PDF:** `pedido.files/reception_paper/verdnatura_<docNum>.pdf` (170 файлов, level above KB). Bulk attach через GitHub raw URL — см. [add/09_reception_INSTR_attach_pdf.md](add/09_reception_INSTR_attach_pdf.md).
+
+---
+
+## 5. Reception_algorithm — главный artefact
+
+**Spec:** [add/09_reception_algorithm.md](add/09_reception_algorithm.md) (current v19, 🟡 PRE-RESET, требует verify) + [add/09_reception_algorithm_v1.md](add/09_reception_algorithm_v1.md) (v1 baseline, 🟢 stable, для сравнения).
+
+**Содержит:**
+- Per-line decision tree (paper-truth, MIX consolidate, pack/stem, ⛔ placeholder, ×N inflation)
+- Card creation rules в карантине
+- Trigger 1217 + verify
+- Iconography (зелёный/жёлтый/оранжевый/красный/синий)
+- Idempotency re-run safe
+
+**Test runs** на одном pedido — через [add/09_reception_INSTR_test_run.md](add/09_reception_INSTR_test_run.md). Bulk-run через всё — отдельный promp ещё не написан.
+
+---
+
+## 6. Action 1217 (`x_studio_claude_finalize`)
+
+**Mirror:** [add/09_reception_action_1217.py](add/09_reception_action_1217.py).
+
+**Триггер:** `purchase.order.x_studio_claude_finalize=True` через `base.automation 15` с фильтром `state in ['draft', 'purchase']`.
+
+**Три ветки:**
+
+| Ветка | Условие | Что делает |
+|---|---|---|
+| **ROLLBACK** | `note` содержит `ROLLBACK_HOLDED_API` | `stock.return.picking` wizard, откат stock.move |
+| **CONFIRM** | state=draft | `button_confirm()` → picking создаётся в `assigned` |
+| **VALIDATE** | state=purchase + picking exists | Phase A2 quantity write + soft-gate + `button_validate()` |
+
+**Soft-gate:** дельта между paper qty и Odoo qty по строке ≤ 5 stems = auto-OK. > 5 — review_status≠OK → блок Validate.
+
+---
+
+## 7. Reconciliation: bot vs algorithm
+
+| Канал | Когда | Артефакты |
+|---|---|---|
+| **Make.com bot Route 2** | Online: новый PDF приехал в Telegram, обогащает existing pedido | [02_makecom_bot.md](02_makecom_bot.md), [add/02_prompt_reconciliation_v3.5.txt](add/02_prompt_reconciliation_v3.5.txt) |
+| **Reception_algorithm (Claude agent)** | Bulk reconciliation 2026 backlog, 188 Holded-imported pedidos, paper PDF на диске | [add/09_reception_algorithm.md](add/09_reception_algorithm.md) |
+
+Оба используют общие принципы (см. [02_makecom_bot § 2 Reconciliation principles](02_makecom_bot.md)) — learned vendor codes, operator hits, identity safety > coverage, paper-truth для qty/price.
+
+---
+
+## 8. Кастомные поля pedido (`purchase.order.line`)
+
+5 полей — см. [03_inventory_pipeline.md § 10](03_inventory_pipeline.md). Заполняются ботом / агентом во время reconciliation:
+
+| Поле | Назначение |
+|---|---|
+| `x_studio_expected_qty` | Оценка логиста / физический recount бухгалтера |
+| `x_studio_item_comment` | Лог reconciliation (Make.com line-log шаблоны) |
+| `x_studio_operator_hit` | Ручная подсказка для LLM-reconciliation |
+| `x_studio_supplier_product_name` | Название с бумаги |
+| `x_studio_supplier_sku` | SKU с бумаги |
+
+На уровне pedido (header):
+- `x_studio_claude_finalize` (bool) — триггер action 1217.
+
+---
+
+## 9. Bill control policy
+
+См. [03_inventory_pipeline.md § 6](03_inventory_pipeline.md):
+- **Цветы / горшечка** (FLORES CORTADAS, PLANTAS EN MACETAS) → `purchase` (On ordered quantities) — платим по бумаге, расхождения «49 из 50» норма.
+- **Остальное** → `receive` (On received quantities).
+
+Применено к ~900 карточкам цветочных категорий 2026-04-18.
+
+---
+
+## 10. Партнёр Verdnatura
+
+**`partner_id = 42`** (НЕ 23 — 23 это посторонняя запись «Washington State Department of Social and Health Services», у неё 0 supplierinfo). После reset id сохранён.
+
+**`VERDNATURA LEVANTE SL`**, испанский поставщик, factura в EUR, IVA 10% G на цветах.
+
+---
+
+## 11. Открытое
+
+| # | Что | Статус |
+|---|---|---|
+| 11.1 | Bulk-run reception_algorithm через все 188 pedidos | 🔴 (ждёт canonical версию алгоритма) |
+| 11.2 | Сравнение algorithm v1 vs v19 → выпуск v20 | 🟡 (owner делает в отдельном чате) |
+| 11.3 | Bulk attach paper PDF к pedido (post-reset) | 🟡 готов INSTR |
+| 11.4 | Make.com bot Route 1 modernization (дубль-check, learned codes) | 🔴 |
+| 11.5 | OLD_ SKU awareness в bot для исторических pedido | 🔴 |
+| 11.6 | Multi-warehouse split одного albarán | 🔴 (custom) |
+
+---
+
+## См. также
+
+- [02_makecom_bot.md](02_makecom_bot.md) — Make.com bot reconciliation engine.
+- [03_inventory_pipeline.md](03_inventory_pipeline.md) — stock-слой приёмки (review_status, calculate_in_shop, sentinel -1).
+- [05_catalog.md](05_catalog.md) — карточки товара (placeholder lines reassign на real cards).
+- [99_invariants.md](99_invariants.md) — правила работы.
+- [add/09_reception_algorithm.md](add/09_reception_algorithm.md) — current spec.
+- [add/09_reception_algorithm_v1.md](add/09_reception_algorithm_v1.md) — v1 baseline.
+- [add/09_reception_action_1217.py](add/09_reception_action_1217.py) — finalizer mirror.
+- [add/09_reception_handover_2026-04-29.md](add/09_reception_handover_2026-04-29.md) — операционные правила.
+- [add/09_reception_audit_v12_prompt.md](add/09_reception_audit_v12_prompt.md), [add/09_reception_audit_v14_prompt.md](add/09_reception_audit_v14_prompt.md) — audit prompts.
+- [add/09_reception_INSTR_attach_pdf.md](add/09_reception_INSTR_attach_pdf.md) — bulk PDF attach recipe.
+- [add/09_reception_INSTR_test_run.md](add/09_reception_INSTR_test_run.md) — single-pedido test run recipe.

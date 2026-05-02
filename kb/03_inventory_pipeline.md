@@ -1,9 +1,9 @@
-<!-- v: 1 | updated: 2026-04-25T00:00Z -->
+<!-- v: 2 | updated: 2026-05-02T23:30Z -->
 # 03. Inventory pipeline — приёмка и bill control
 
 **Что в файле:** техдок приёмки (`stock.picking` / `stock.move` слой, review-status, calculate_in_shop, sentinel -1) + bill control policy (`purchase` vs `receive`) + backorder logic. **Reconciliation слой** (бот + `purchase.order.line`) — отдельно в [02_makecom_bot.md](02_makecom_bot.md).
 
-**Status:** 🟢 PROD — 18 stock.move с review-статусами в проде, 188 pedido в системе.
+**Status:** 🟢 PROD — review automation активна (id=1146); 188 pedido draft в системе после Holded re-import; stock.move = 0 пока pedidos не подтверждены.
 
 ---
 
@@ -69,7 +69,7 @@
 | Trigger | `on_create_or_write` |
 | Watched fields | `quantity`, `x_studio_received_packs` (узкий список — [99 §G2](99_invariants.md)) |
 | Server action id | 1146 |
-| Snapshot file | `review_status_automation.py` |
+| Snapshot file | `add/03_review_status_automation.py` |
 
 ### 4.1. Severity levels
 
@@ -120,7 +120,7 @@ is_pack = 'paq' in unit or 'pack' in unit or 'paquete' in unit
 |---|---|
 | Server action | `calculate_in_shop` (id=1150) |
 | Binding | `stock.picking` (list + form view) |
-| Snapshot file | `calculate_in_shop_action.py` |
+| Snapshot file | `add/03_calculate_in_shop_action.py` |
 
 **Что делает:**
 ```python
@@ -290,5 +290,5 @@ for record in self:
 - [04_pos_and_roles.md](04_pos_and_roles.md) — роль логиста и связь с приёмкой.
 - [05_catalog.md](05_catalog.md) — откуда берутся карточки + миграция supplierinfo.
 - [99_invariants.md](99_invariants.md) — гл. правила + Odoo 19 gotchas (G1-G5 про automation, G2 про watched fields).
-- `review_status_automation.py` — mirror action 1146.
-- `calculate_in_shop_action.py` — mirror action 1150.
+- `add/03_review_status_automation.py` — mirror action 1146.
+- `add/03_calculate_in_shop_action.py` — mirror action 1150.

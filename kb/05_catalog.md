@@ -1,4 +1,4 @@
-<!-- v: 2 | updated: 2026-05-02T11:55Z -->
+<!-- v: 3 | updated: 2026-05-02T23:30Z -->
 # 05. Каталог и миграция (v2.2)
 
 **Что в файле:** migration toolkit v2.2 (UI trigger + execute + automation), 4 правила миграции (бывшие §20-23 в старом 99), category tree, ID-registry мигрированных карточек (пусто после reset), validation matrix (исторические тесты toolkit), post-migration procedures, rollback. Структуры карточек и кастомные поля Holded — здесь же.
@@ -40,8 +40,8 @@ Domain на `x_studio_target_variant` явно исключает `child_of 207`
 | **Automation** | `base.automation` 6 | `product.product` | `trigger=on_create_or_write`, watched `x_studio_migrate_now` (id 27133), filter `[migrate_now=True, target!=False, status!=archived]`, action `[1176]` |
 
 **Snapshot files** (см. [99 §2](99_invariants.md)):
-- `migrate_variant_action.py` ↔ 1145
-- `migrate_variant_v2.2.py` ↔ 1176
+- `add/05_migrate_variant_action.py` ↔ 1145
+- `add/05_migrate_variant_v2.2.py` ↔ 1176
 
 ### 2.1. Два пути запуска (паритет подтверждён)
 
@@ -168,7 +168,7 @@ target_is_flat = len(target_template.product_variant_ids) == 1
 
 **Почему так:** POS тайлы читают template-level image для flat, variant-level для multivariant — чтобы варианты отличались визуально на кассе.
 
-**Все 10 мигрированных карточек — flat→flat.** Multivariant target на реальных данных ещё не тестировался (будет при миграции Rosa Red Naomi с attributes 40/50/60 cm).
+**Toolkit верифицирован на flat→flat** (см. §9 Validation matrix). Multivariant target ещё не тестировался — ждёт первую multivariant-миграцию (Rosa Red Naomi с attributes 40/50/60 cm).
 
 ---
 
@@ -377,5 +377,5 @@ odoo.search_records('product.template',
 - [08_holded_archive.md](08_holded_archive.md) — откуда берутся карточки в карантине + .py исходники image import.
 - [07_state_snapshot.md](07_state_snapshot.md) — текущая migration progress.
 - [99_invariants.md](99_invariants.md) — § 2 (scripts archive), § G6 (archive template-level), § G7 (Studio fields template-level).
-- `migrate_variant_action.py` — mirror action 1145 (UI trigger).
-- `migrate_variant_v2.2.py` — mirror action 1176 (execute).
+- `add/05_migrate_variant_action.py` — mirror action 1145 (UI trigger).
+- `add/05_migrate_variant_v2.2.py` — mirror action 1176 (execute).

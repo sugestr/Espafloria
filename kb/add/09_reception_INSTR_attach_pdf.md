@@ -10,8 +10,8 @@
 
 Ты работаешь над Espafloria SL Odoo 19 SaaS Custom (`espafloriasl.odoo.com`). Сначала прочитай по порядку:
 
-1. `/Users/andriy/Documents/master-context/CLAUDE.md`
-2. `/Users/andriy/Documents/master-context/master-context/99_invariants.md`
+1. `/Users/andriy/Documents/espafloria.odoo/CLAUDE.md`
+2. `/Users/andriy/Documents/espafloria.odoo/kb/99_invariants.md`
 
 ## Цель
 
@@ -21,14 +21,14 @@
 
 Локально:
 ```
-/Users/andriy/Documents/master-context/reception_paper/
+/Users/andriy/Documents/espafloria.odoo/pedido.files/reception_paper/
 ```
 
-В репо (public GitHub): `sugestr/Espafloria` → `reception_paper/`
+В репо (public GitHub): `sugestr/Espafloria` → `pedido.files/reception_paper/`
 
 Public raw URL pattern (Odoo сама их фетчит):
 ```
-https://raw.githubusercontent.com/sugestr/Espafloria/main/reception_paper/<filename>
+https://raw.githubusercontent.com/sugestr/Espafloria/main/pedido.files/reception_paper/<filename>
 ```
 
 В папке ~170 файлов:
@@ -51,7 +51,7 @@ search_records('res.partner', [['name','ilike','VERDNATURA']], fields=['id','nam
 ### Шаг 1 — list PDF
 
 ```bash
-ls /Users/andriy/Documents/master-context/reception_paper/verdnatura_*.pdf
+ls /Users/andriy/Documents/espafloria.odoo/pedido.files/reception_paper/verdnatura_*.pdf
 ```
 
 Извлеки docNum из имени: `verdnatura_12211352.pdf` → docNum = `12211352`. Регекс `verdnatura_(\d+)\.pdf`.
@@ -120,7 +120,7 @@ att = create_record('ir.attachment', {
 # 4b — Odoo сама фетчит файл по URL
 set_binary_field(
     'ir.attachment', att['record']['id'], 'datas',
-    source=f'https://raw.githubusercontent.com/sugestr/Espafloria/main/reception_paper/verdnatura_{docNum}.pdf'
+    source=f'https://raw.githubusercontent.com/sugestr/Espafloria/main/pedido.files/reception_paper/verdnatura_{docNum}.pdf'
 )
 ```
 
@@ -185,7 +185,7 @@ Coverage: N / total Verdnatura pedidos = ratio
 
 ## CHANGELOG
 
-После задачи — одна строка в `/Users/andriy/Documents/master-context/master-context/CHANGELOG.md` сверху (bump v):
+После задачи — одна строка в `/Users/andriy/Documents/espafloria.odoo/kb/CHANGELOG.md` сверху (bump v):
 
 ```
 - 2026-05-XX — **paper PDF bulk attach post-reset**: N PDF прицеплены к Verdnatura pedido через GitHub raw URL + ir.attachment + set_binary_field. K pre-existing skipped, Z unmatched, W conflicts. author_id=56 chatter audit на каждом.

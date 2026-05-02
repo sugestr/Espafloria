@@ -3,16 +3,16 @@
 База знаний проекта автоматизации Espafloria SL (Odoo Online Custom + Make.com + Telegram bot).
 **Owner:** Andriy
 **Prod:** espafloriasl.odoo.com
-**Platform:** Odoo Online (SaaS) Custom — НЕ Odoo.sh (см. [06_infra.md](master-context/06_infra.md), [99 §3](master-context/99_invariants.md)).
+**Platform:** Odoo Online (SaaS) Custom — НЕ Odoo.sh (см. [06_infra.md](kb/06_infra.md), [99 §3](kb/99_invariants.md)).
 
 ---
 
 ## 📋 Читай при старте задачи (в таком порядке)
 
-1. `master-context/99_invariants.md` — 5 правил + 11 Odoo 19 gotchas. **Всегда** перед любой правкой.
-2. `master-context/00_index.md` — карта файлов + глоссарий + статусы.
-3. `master-context/01_project.md` — большая картина (бизнес + архитектура + roadmap + wishlist).
-4. Тематический файл по задаче (02-08).
+1. `kb/99_invariants.md` — 5 правил + 11 Odoo 19 gotchas. **Всегда** перед любой правкой.
+2. `kb/00_index.md` — карта файлов + глоссарий + статусы.
+3. `kb/01_project.md` — большая картина (бизнес + архитектура + roadmap + wishlist).
+4. Тематический файл по задаче (02-09).
 
 ---
 
@@ -22,10 +22,12 @@
 После **любого** изменения в системе (своими руками или через API) — запись в `CHANGELOG.md`. Одна строка сверху на сессию: `- YYYY-MM-DD — <subject>`. Больше 15 строк — удалить самую старую.
 
 ### Архив custom Python в репо
-Любой `ir.actions.server` или `base.automation` с Python-кодом, работающий на prod, обязан иметь зеркало `.py` в `master-context/`. **Истина по факту работы — prod Odoo.** Репо — архив/бекап на случай потери БД, плюс git-history и review.
+Любой `ir.actions.server` или `base.automation` с Python-кодом, работающий на prod, обязан иметь зеркало `.py` в `kb/add/` с префиксом блока (`NN_`). **Истина по факту работы — prod Odoo.** Репо — архив/бекап на случай потери БД, плюс git-history и review.
 
-### `master-context/` = только база знаний, рабочие/data файлы — на уровень выше
-В `master-context/` лежат только **prompts/specs/instructions/mirrors** (`.md` доки, `.py`/`.txt` зеркала prod-кода и Make.com промпты, `INSTR_*` промт-инструкции). **Output / data / temp** файлы (PDF dumps, CSV для импорта, JSON snapshots, helper-скрипты, audit reports) — на уровень выше в `/Users/andriy/Documents/master-context/`. Пример: `reception_paper/` (170 paper PDF), `AUDIT_reception_algorithm_REPORT.md` (output аудита), `verdnatura/` (CSV для импорта) — все не в KB.
+### `kb/` = только база знаний, data — в `pedido.files/`
+В `kb/` лежат **главы** (00-09 + 99) + `kb/add/` со всеми служебными артефактами с префиксом блока (`NN_`): mirrors `.py`, prompts `.txt`, INSTR-инструкции, audit reports, sub-specs.
+
+**Data / temp / output** файлы (paper PDF, ETL CSV, backups) — в `pedido.files/` на уровне выше KB. Пример: `pedido.files/reception_paper/` (170 paper PDF), `pedido.files/verdnatura/` (CSV импорта). Backups и прочие dumps — в `резервные копии Odoo базы/` или вне репо.
 
 ### Перед массовыми операциями — тест на одной записи
 Миграция карточек, bulk-update полей, массовое изменение `purchase_method` — сначала **ОДНА** запись, проверка результата, потом batch.
@@ -56,7 +58,7 @@ File tools (Write/Edit) пишут на реальный диск. Sandbox bash 
 Не добавляй записи «мы сделали X». Правь прямо в нужном месте, как будто так и было. История — в `CHANGELOG.md`.
 
 ### Snapshot-артефакты — синк с prod
-`*.py`, `prompt_*.txt`, `make_line_log_*.txt` синхронизировать с prod при любой правке prod-копии (см. [99 §2](master-context/99_invariants.md)).
+`*.py`, `prompt_*.txt`, `make_line_log_*.txt` синхронизировать с prod при любой правке prod-копии (см. [99 §2](kb/99_invariants.md)).
 
 ### Длинные ответы — нумеровать секции
 В моих длинных ответах используй иерархическую нумерацию (1, 1.1, 1.2, 2.1...) — owner ссылается номером на конкретный пункт.
@@ -86,11 +88,11 @@ File tools (Write/Edit) пишут на реальный диск. Sandbox bash 
 
 - Не создавай новых `.md` без моего одобрения.
 - Не рефактори ради рефакторинга — меньше правок лучше.
-- Не меняй архитектуру flat layout (все артефакты на одном уровне с .md).
+- Не клади служебные артефакты в корень `kb/` — только в `kb/add/` с блок-префиксом `NN_`.
 - Не утверждай поведение Odoo из памяти / тренировки — всегда сверять с docs 19 / live.
 
 ---
 
 ## 🎯 Конечная цель
 
-**Умная сеть цветочных магазинов** — база и роботы делают основную работу по контролю сотрудников и структурной целостности бизнеса. Vision и принципы реализации — в [01_project.md](master-context/01_project.md).
+**Умная сеть цветочных магазинов** — база и роботы делают основную работу по контролю сотрудников и структурной целостности бизнеса. Vision и принципы реализации — в [01_project.md](kb/01_project.md).

@@ -1,5 +1,8 @@
-# Espafloria — Master Context
+# Espafloria
 
-Вся база знаний живёт в [`master-context/`](master-context/). Там же [полный README](master-context/README.md) с правилами репо, структурой и worker-протоколом.
+База знаний и артефакты автоматизации Espafloria SL.
 
-**Репо:** `sugestr/Espafloria` (private) · **ветка:** `main` · **Owner:** Andriy
+- [`kb/`](kb/) — knowledge base ([полный README](kb/README.md))
+- [`pedido.files/`](pedido.files/) — paper PDF + ETL CSV (data, не KB)
+
+**Репо:** `sugestr/Espafloria` (private) · **Owner:** Andriy · **Prod:** https://espafloriasl.odoo.com

@@ -1,4 +1,4 @@
-<!-- v: 2 | updated: 2026-05-02T19:30Z -->
+<!-- v: 3 | updated: 2026-05-02T23:30Z -->
 # 08. Holded archive — миграция каталога и .py исходники
 
 **Что в файле:** документ миграции каталога из Holded в Odoo Online + Python-исходники одноразовых скриптов (image import, tax fix). Используется как baseline для боевого cutover.
@@ -19,7 +19,7 @@
 | Налоги (sale + purchase, EU intracomunitario) | ✅ настроены | ✅ |
 | `sale_ok=False` на всём карантине | ✅ применено | ✅ |
 | Botanical tags | штатные `product.tag` | ✅ |
-| Albaran / pedido | 173 historical в backlog | 🟡 |
+| Albaran / pedido | 188 imported, draft в Odoo | 🟡 |
 
 ---
 

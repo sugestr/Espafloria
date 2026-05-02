@@ -1,4 +1,4 @@
-<!-- v: 2 | updated: 2026-05-02T11:50Z -->
+<!-- v: 3 | updated: 2026-05-02T23:30Z -->
 # 07. Current state snapshot
 
 **Что в файле:** живой снимок системы — конкретные ID, цифры, состояния. Обновляется при крупных изменениях. Это «фото на сегодня», не история.
@@ -29,7 +29,7 @@
 | `res.users` (internal) | **2** | Andriy (id=2 admin) + POS Terminal (id=5 kiosk) |
 | `hr.employee` | **3** | Andriy (1), Mega Florist 1111 (10, pin 1111), 2 Florista Test (11, pin 2222) |
 | `base.automation` (активных) | **5** | Review info (1), Auto migrate v2 (6), Bouquet POS→SO (10), Bouquet dismantle picking (11), Bouquet safety net pos.order (12) |
-| `ir.actions.server` custom | **7+** | 1145 (Migrate UI), 1146 (review_status), 1150 (calculate_in_shop), 1176 (Migrate execute v2.2), 1203 (Bouquet payment), 1209 (Bouquet dismantle), 1217 (reconcile finalize) — все mirror в master-context/ |
+| `ir.actions.server` custom | **7+** | 1145 (Migrate UI), 1146 (review_status), 1150 (calculate_in_shop), 1176 (Migrate execute v2.2), 1203 (Bouquet payment), 1209 (Bouquet dismantle), 1217 (reconcile finalize) — все mirror в `kb/add/` |
 | `loyalty.program` | **1** | id=2 «eWallet», все 3 POS, EUR |
 
 ---
@@ -130,14 +130,14 @@ JE 19/20/21 верифицированы (Tata 100€ + redemption 3€). См. 
 
 | ID | Название | Model | Snapshot file |
 |---|---|---|---|
-| 1145 | Migrate UI trigger v2 | product.template | `migrate_variant_action.py` |
-| 1146 | Review → generate info conclusion | stock.move | `review_status_automation.py` |
-| 1150 | calculate_in_shop | stock.picking | `calculate_in_shop_action.py` |
-| 1176 | Migrate execute v2.2 | product.product | `migrate_variant_v2.2.py` |
-| 1203 | Bouquet on payment (4 ветки) | pos.order | `bouquet_on_payment_action.py` |
-| 1205 | Bouquet on stock.picking (deprecated) | stock.picking | `bouquet_on_picking_action.py` |
-| 1207 | Bouquet on pos.order paid (deprecated) | pos.order | `bouquet_on_order_paid_action.py` |
-| 1209 | Bouquet dismantle | pos.order | `bouquet_on_dismantle_action.py` |
+| 1145 | Migrate UI trigger v2 | product.template | `add/05_migrate_variant_action.py` |
+| 1146 | Review → generate info conclusion | stock.move | `add/03_review_status_automation.py` |
+| 1150 | calculate_in_shop | stock.picking | `add/03_calculate_in_shop_action.py` |
+| 1176 | Migrate execute v2.2 | product.product | `add/05_migrate_variant_v2.2.py` |
+| 1203 | Bouquet on payment (4 ветки) | pos.order | `add/04_bouquet_on_payment_action.py` |
+| 1205 | Bouquet on stock.picking (deprecated) | stock.picking | `add/04_bouquet_on_picking_action.py` |
+| 1207 | Bouquet on pos.order paid (deprecated) | pos.order | `add/04_bouquet_on_order_paid_action.py` |
+| 1209 | Bouquet dismantle | pos.order | `add/04_bouquet_on_dismantle_action.py` |
 
 ---
 
@@ -183,15 +183,7 @@ JE 19/20/21 верифицированы (Tata 100€ + redemption 3€). См. 
 
 ## 10. `product.supplierinfo` (learned codes)
 
-**Всего: 22 записи.** 16 старых на карантинных source template + 6 скопированных при миграции (ID 299-305 на target templates 7834-7837). Все от VERDNATURA LEVANTE SL (partner_id=42).
-
-Примеры скопированных:
-- 302-305 (CRISANTEMO 7836): product_codes 181190/199235/199939/197433.
-- 299 (ROSA 7834): 24547.
-- 300 (MARFULL 7835): из 110294.
-- 301 (EUCALIPTO 7837): UOM=Paquete (Усреднённый, id=31).
-
-При массовом импорте albaran ожидаем рост до сотен/тысяч.
+**0 записей** после wipe тестовых транзакций. Будут наполняться при reconciliation pedidos через action 1217 + reception_algorithm. До reset было 22 (16 старых + 6 скопированных миграцией) — git history.
 
 ---
 

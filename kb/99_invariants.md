@@ -1,4 +1,4 @@
-<!-- v: 9 | updated: 2026-04-25T00:00Z -->
+<!-- v: 10 | updated: 2026-05-02T23:30Z -->
 # 99. Invariants — железные правила проекта
 
 **Читать перед любыми изменениями в системе.** Нарушение этих правил создаёт техдолг, ломает бот или теряет данные.
@@ -13,22 +13,22 @@
 После **любого** изменения в базе (своими руками или через API) — запись в `CHANGELOG.md` с датой, автором, что изменили. Одна строка сверху на сессию: `- YYYY-MM-DD — <subject>`. Больше 15 строк — удалить самую старую.
 
 ### 2. Архив всех custom Python-скриптов — в репо
-Любой `ir.actions.server` или `base.automation` с Python-кодом, работающий на prod Odoo, обязан иметь зеркало `.py` в `master-context/`.
+Любой `ir.actions.server` или `base.automation` с Python-кодом, работающий на prod Odoo, обязан иметь зеркало `.py` в `kb/add/` с префиксом блока (`NN_`).
 
 **Истина по факту работы — prod Odoo.** Репо — архив/бекап на случай потери БД, плюс git-history и review.
 
 Актуальные пары:
-- `migrate_variant_action.py` ↔ `ir.actions.server id=1145`
-- `migrate_variant_v2.2.py` ↔ `ir.actions.server id=1176`
-- `calculate_in_shop_action.py` ↔ `ir.actions.server id=1150`
-- `review_status_automation.py` ↔ `ir.actions.server id=1146`
-- `bouquet_on_payment_action.py` ↔ `ir.actions.server id=1203`
-- `bouquet_on_dismantle_action.py` ↔ `ir.actions.server id=1209`
+- `add/05_migrate_variant_action.py` ↔ `ir.actions.server id=1145`
+- `add/05_migrate_variant_v2.2.py` ↔ `ir.actions.server id=1176`
+- `add/03_calculate_in_shop_action.py` ↔ `ir.actions.server id=1150`
+- `add/03_review_status_automation.py` ↔ `ir.actions.server id=1146`
+- `add/04_bouquet_on_payment_action.py` ↔ `ir.actions.server id=1203`
+- `add/04_bouquet_on_dismantle_action.py` ↔ `ir.actions.server id=1209`
 
 ### 3. Не мигрировать на Odoo.sh без жёсткой нужды
 Сейчас мы на **Odoo Online (SaaS) Custom**. Переход на Odoo.sh — **one-way** (после `custom_addons` обратно нельзя). **Сначала всё что можно — штатно на Online** (Studio + Automated Actions + Server Actions с Python разрешены).
 
-Жёсткие триггеры миграции — только когда хотелка физически невозможна на Online. Сейчас единственный жёсткий драйвер — photo capture в POS UI (требует custom OWL widget). См. [POS_AUDIT_2026-04-25.md](../POS_AUDIT_2026-04-25.md).
+Жёсткие триггеры миграции — только когда хотелка физически невозможна на Online. Сейчас единственный жёсткий драйвер — photo capture в POS UI (требует custom OWL widget). См. [add/04_pos_audit_2026-04-25.md](add/04_pos_audit_2026-04-25.md).
 
 ### 4. Перед утверждением поведения Odoo — свериться с docs 19 / community / live-базой
 **Не утверждать из памяти/тренировки.** Odoo 19 ≠ 17/18 во многих местах. Сверять:

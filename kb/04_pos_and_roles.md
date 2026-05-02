@@ -1,4 +1,4 @@
-<!-- v: 1 | updated: 2026-04-25T00:00Z -->
+<!-- v: 2 | updated: 2026-05-02T23:30Z -->
 # 04. POS, букеты, eWallet, роли, бонусы, CRM
 
 **Что в файле:** техдок всего, что вокруг кассы. **Букеты — полная архитектура** (reserve-model v2). **eWallet — полная бухгалтерская и operational механика.** Роли (флорист/логист/бухгалтер). Бонусная модель. CRM. Всё, что в документе на 2026-04-25.
@@ -70,8 +70,8 @@
 | ID | name | pin | роль |
 |---|---|---|---|
 | 1 | Andriy Klymenko | false | manager |
-| 10 | 1 Florista Test | 1111 | test florist |
-| 11 | 2 Florista Test | 2222 | test florist |
+| 10 | Mega Florist 1111 | 1111 | future florist placeholder |
+| 11 | 2 Florista Test | 2222 | future florist placeholder |
 
 `hr.employee` **не занимает лицензию** — PIN-логин через `pos_hr` бесплатный. Каждая продажа прилипает к `pos.order.employee_id` — фундамент бонусной модели (см. § 6).
 
@@ -183,9 +183,9 @@ Service product, default 5€ IVA 10%. Бизнес-логика:
 
 ### 2.10. Snapshot files
 
-- `bouquet_on_payment_action.py` ↔ `ir.actions.server id=1203` (4 ветки)
-- `bouquet_on_dismantle_action.py` ↔ `ir.actions.server id=1209` (только dismantle)
-- Deprecated (в репо для истории): `bouquet_on_picking_action.py` (1205), `bouquet_on_order_paid_action.py` (1207)
+- `add/04_bouquet_on_payment_action.py` ↔ `ir.actions.server id=1203` (4 ветки)
+- `add/04_bouquet_on_dismantle_action.py` ↔ `ir.actions.server id=1209` (только dismantle)
+- Deprecated (в репо для истории): `add/04_bouquet_on_picking_action.py` (1205), `add/04_bouquet_on_order_paid_action.py` (1207)
 
 ### 2.11. Открытое по букетам
 
