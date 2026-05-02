@@ -11,11 +11,11 @@ You have **no prior context** for this project beyond what the source files say.
 
 ## 1. Required reading (in this exact order)
 
-1. **`/Users/andriy/Documents/master-context/master-context/AUDIT_reception_algorithm.md`** — original audit prompt (your audit dimensions D1-D9 are defined here).
+1. **`/Users/andriy/Documents/master-context/master-context/reception_audit_v12_prompt.md`** — original audit prompt (your audit dimensions D1-D9 are defined here).
 2. **`/Users/andriy/Documents/master-context/master-context/AUDIT_reception_algorithm_REPORT.md`** — first-pass audit report on v12. Contains 5 BLOCKER + 11 MAJOR + 9 MINOR + 6 NIT + 18 lost-features + 6 contradictions + 9 production-drift items.
 3. **`/Users/andriy/Documents/master-context/master-context/prompt_reconciliation_v3.5.txt`** — proven Module 149 baseline. Ground truth for IDENTITY MATCHING POLICY.
-4. **`/Users/andriy/Documents/master-context/master-context/SESSION_HANDOVER_2026-04-29.md`** — ground truth for HARD RULES.
-5. **`/Users/andriy/Documents/master-context/master-context/reconcile_finalize_action.py`** — ground truth for SERVER-SIDE BEHAVIOR (action 1217 v7.7).
+4. **`/Users/andriy/Documents/master-context/master-context/reception_handover_2026-04-29.md`** — ground truth for HARD RULES.
+5. **`/Users/andriy/Documents/master-context/master-context/reception_action_1217.py`** — ground truth for SERVER-SIDE BEHAVIOR (action 1217 v7.7).
 6. **`/Users/andriy/Documents/master-context/master-context/reception_algorithm.md`** — **v14, the document under re-audit**.
 7. **`/Users/andriy/Documents/master-context/master-context/99_invariants.md`** — project invariants.
 8. **`/Users/andriy/Documents/master-context/CHANGELOG.md`** — last 10 entries.

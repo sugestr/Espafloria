@@ -4,7 +4,7 @@ description: Что умеет и не умеет ir.actions.server id=1217 дл
 type: project
 originSessionId: 37b18c39-25eb-4c7f-b45c-7e6b5ce66cd3
 ---
-ir.actions.server id=1217 (🤖 Claude AI Reconcile Finalize) триггерится через `x_studio_claude_finalize=True` на purchase.order. Mirror — `master-context/reconcile_finalize_action.py`.
+ir.actions.server id=1217 (🤖 Claude AI Reconcile Finalize) триггерится через `x_studio_claude_finalize=True` на purchase.order. Mirror — `master-context/reception_action_1217.py`.
 
 **Pipeline:**
 1. Pre-flight: `state=='draft'`, `amount_total>0`, все order_line имеют `x_studio_supplier_sku`

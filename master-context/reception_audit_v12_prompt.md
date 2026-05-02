@@ -30,8 +30,8 @@ The algorithm is delivered as `reception_algorithm.md` v12. It will be consumed 
 Read every file fully before producing any finding. Do not skim. Cite line numbers.
 
 1. **`/Users/andriy/Documents/master-context/master-context/prompt_reconciliation_v3.5.txt`** — Module 149 GPT prompt, 595 lines. The proven Make.com baseline that successfully reconciled hundreds of pedidos before the Odoo migration. **Ground truth for identity-matching policy.**
-2. **`/Users/andriy/Documents/master-context/master-context/SESSION_HANDOVER_2026-04-29.md`** — 463 lines. Consolidated owner verbatim quotes, 11 grabli (gotchas), cumulative pedido status, infrastructure description. **Ground truth for hard rules and operational gotchas.**
-3. **`/Users/andriy/Documents/master-context/master-context/reconcile_finalize_action.py`** — production server action 1217 v7.7, ~175 lines. Currently running on `espafloriasl.odoo.com`. **Ground truth for server-side behavior.** Anything the spec says about action 1217 must match what this code actually does.
+2. **`/Users/andriy/Documents/master-context/master-context/reception_handover_2026-04-29.md`** — 463 lines. Consolidated owner verbatim quotes, 11 grabli (gotchas), cumulative pedido status, infrastructure description. **Ground truth for hard rules and operational gotchas.**
+3. **`/Users/andriy/Documents/master-context/master-context/reception_action_1217.py`** — production server action 1217 v7.7, ~175 lines. Currently running on `espafloriasl.odoo.com`. **Ground truth for server-side behavior.** Anything the spec says about action 1217 must match what this code actually does.
 4. **`/Users/andriy/Documents/master-context/master-context/reception_algorithm.md`** — the **document under audit**. Treat with suspicion. Do not assume any statement here is correct.
 5. **`/Users/andriy/Documents/master-context/master-context/99_invariants.md`** — project invariants (5 rules + Odoo 19 gotchas).
 6. **`/Users/andriy/Documents/master-context/CHANGELOG.md`** — last 10 entries for recent decision context.
@@ -124,8 +124,8 @@ The algorithm document MUST be a single, self-sufficient file readable in isolat
 Audit specifically:
 - Search for any reference to `memory/`, `MEMORY.md`, `feedback_*.md`, `project_*.md`, `master-context/memory/` — every hit is a finding.
 - Search for "see other doc" / "consult X" / "as in handover" / "as documented elsewhere" deferrals — every deferral is a finding (the content must be inlined or flagged as missing).
-- Cross-check `prompt_reconciliation_v3.5.txt` and `SESSION_HANDOVER_2026-04-29.md` for facts/rules that should have been inlined into the algorithm but weren't (Lost-features inventory will catch most, but call out any that read like "knowledge that should live in the algorithm but doesn't").
-- The algorithm file MAY reference: `reconcile_finalize_action.py` (production code mirror — that's a contract, not knowledge dependency); paper PDF paths; GitHub raw URLs for paper attach. It MUST NOT reference memory or session-handover files as runtime sources.
+- Cross-check `prompt_reconciliation_v3.5.txt` and `reception_handover_2026-04-29.md` for facts/rules that should have been inlined into the algorithm but weren't (Lost-features inventory will catch most, but call out any that read like "knowledge that should live in the algorithm but doesn't").
+- The algorithm file MAY reference: `reception_action_1217.py` (production code mirror — that's a contract, not knowledge dependency); paper PDF paths; GitHub raw URLs for paper attach. It MUST NOT reference memory or session-handover files as runtime sources.
 
 If §H "Runtime checklist" or any other section instructs the subagent to read another markdown file before working — flag as 🔴 BLOCKER.
 
@@ -164,7 +164,7 @@ Features present in v3.5 (file 1) or HANDOVER (file 2) that are missing from rec
 Pairs of statements WITHIN reception_algorithm.md that conflict. Cite both.
 
 ## Production-contract drift
-Where reception_algorithm.md description of action 1217 ≠ what reconcile_finalize_action.py actually does. Cite both.
+Where reception_algorithm.md description of action 1217 ≠ what reception_action_1217.py actually does. Cite both.
 
 ## Section-by-section quality scores
 | Section in reception_algorithm.md | Clarity (1-5) | Completeness (1-5) | Consistency (1-5) | Self-contained (Y/N) | Notes |

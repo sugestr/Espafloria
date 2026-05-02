@@ -24,6 +24,9 @@
 ### Архив custom Python в репо
 Любой `ir.actions.server` или `base.automation` с Python-кодом, работающий на prod, обязан иметь зеркало `.py` в `master-context/`. **Истина по факту работы — prod Odoo.** Репо — архив/бекап на случай потери БД, плюс git-history и review.
 
+### `master-context/` = только база знаний, рабочие/data файлы — на уровень выше
+В `master-context/` лежат только **prompts/specs/instructions/mirrors** (`.md` доки, `.py`/`.txt` зеркала prod-кода и Make.com промпты, `INSTR_*` промт-инструкции). **Output / data / temp** файлы (PDF dumps, CSV для импорта, JSON snapshots, helper-скрипты, audit reports) — на уровень выше в `/Users/andriy/Documents/master-context/`. Пример: `reception_paper/` (170 paper PDF), `AUDIT_reception_algorithm_REPORT.md` (output аудита), `verdnatura/` (CSV для импорта) — все не в KB.
+
 ### Перед массовыми операциями — тест на одной записи
 Миграция карточек, bulk-update полей, массовое изменение `purchase_method` — сначала **ОДНА** запись, проверка результата, потом batch.
 

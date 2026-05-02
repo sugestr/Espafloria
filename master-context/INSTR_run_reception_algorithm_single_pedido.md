@@ -33,7 +33,7 @@ DRY_RUN = true | false             # true = посчитать & показат�
 1. `/Users/andriy/Documents/master-context/CLAUDE.md`
 2. `/Users/andriy/Documents/master-context/master-context/99_invariants.md`
 3. **`{ALGORITHM_FILE_PATH}` целиком** — это твой spec. Следуй буквально.
-4. `/Users/andriy/Documents/master-context/master-context/reconcile_finalize_action.py` — server action 1217 (mirror prod-кода). Понять что делает finalize-флаг.
+4. `/Users/andriy/Documents/master-context/master-context/reception_action_1217.py` — server action 1217 (mirror prod-кода). Понять что делает finalize-флаг.
 5. Если есть COMPARE_TO_VERSION — прочитать тоже эту версию для diff-понимания.
 
 ### Шаг 1 — найти pedido
