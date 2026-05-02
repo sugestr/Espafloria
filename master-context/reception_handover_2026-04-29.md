@@ -1,5 +1,7 @@
-<!-- v: 3 | updated: 2026-04-29T17:50Z -->
+<!-- v: 4 | updated: 2026-05-02T22:45Z -->
 # Session handover — Verdnatura 2026 reconciliation
+
+> 🟢 **STATUS 2026-05-02: ACTIVE — v1 baseline алгоритма реконсиляции** (snapshot сессии 2026-04-29). Сохранён для сравнения с `reception_algorithm.md` v19 (post-reset, требует verify) при подготовке v20 в следующей сессии. Конкретные target цифры (173 pedido, 138 closed) — устаревшие после DB reset 2026-05-02; правила (бумага=истина, holded=глюк, без paper PDF не закрываем), gotchas, operational patterns — **актуальны** как первая зрелая формулировка процесса.
 
 Контекст для новой сессии: подбираем работу по реконсиляции 173 Verdnatura albaranes за 2026 г.
 

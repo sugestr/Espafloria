@@ -1,4 +1,4 @@
-<!-- v: 2 | updated: 2026-05-02T21:15Z -->
+<!-- v: 2 | updated: 2026-05-02T22:50Z -->
 # 00. Master Index — Espafloria Odoo
 
 **Owner:** Andriy
@@ -58,6 +58,7 @@ Knowledge base для проекта автоматизации Espafloria. Це
 | `INSTR_bulk_attach_paper_pdf.md` | После DB reset / Holded re-import — массово прицепить ~166 paper PDF из `../reception_paper/` к Verdnatura pedido в Odoo через `ir.attachment` + `set_binary_field` с GitHub raw URL | N attached, K pre-existing, Z unmatched, W conflicts отчёт |
 | `INSTR_run_reception_algorithm_single_pedido.md` | Тестовый прогон `reception_algorithm.md` на ОДНОМ pedido (test single, не batch). Для тестирования новых версий алгоритма + side-by-side diff с предыдущей версией | run-report в `algo_test_runs/{docNum}_{version}.md` |
 | `INSTR_wipe_test_transactions.md` | Сборник независимых рецептов для зачистки транзакционных данных (POS / sales / accounting / stock / loyalty / mail / test partners) **без** трогания каталога, pedidos, конфига, автоматизаций. Каждый блок применяется отдельно. Backup-first как основное правило | clean state по выбранным сущностям |
+| `INSTR_kb_cleanup_pass.md` | Периодическая компактификация базы знаний: убрать противоречия, дубли, stale facts, расползание. **Только cleanup существующего**, не добавление нового. Файлы которые НЕ трогать: 99_invariants, 02_makecom (вернётся), reception_audit_*, reception_handover (v1 baseline), memory/ | KB компактнее без потери смысла |
 
 После выбора canonical версии алгоритма (через тестовые прогоны через 2-ю инструкцию) — bulk-прогон через все pedido делается отдельным batch-промтом (создаётся при готовности).
 
