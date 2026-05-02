@@ -1,4 +1,4 @@
-<!-- v: 3 | updated: 2026-05-02T23:30Z -->
+<!-- v: 4 | updated: 2026-05-03T00:30Z -->
 # 00. Master Index — Espafloria Odoo
 
 **Owner:** Andriy
@@ -115,8 +115,8 @@ kb/
 
 | Файл | Назначение |
 |---|---|
-| `add/09_reception_algorithm.md` | Spec алгоритма приёмки albaranes (current v19, 🟡 PRE-RESET, требует verify) |
-| `add/09_reception_algorithm_v1.md` | v1 baseline алгоритма (🟢 stable, для сравнения с v19 → выпуск v20) |
+| `add/09_reception_algorithm.md` | Spec алгоритма приёмки albaranes (current **v20**, 🟢 PROD-ready) |
+| `add/09_reception_algorithm_v1.md` | v1 baseline алгоритма (исторический, для сравнения с v20) |
 | `add/09_reception_action_1217.py` | Mirror prod-action 1217 (finalize-флаг + soft-gate + Phase A2 + ROLLBACK) |
 | `add/09_reception_handover_2026-04-29.md` | Snapshot prod-state на 2026-04-29 (operational rules + gotchas) |
 | `add/09_reception_audit_v12_prompt.md` | Independent audit prompt для v12 алгоритма |

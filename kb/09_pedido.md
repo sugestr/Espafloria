@@ -1,4 +1,4 @@
-<!-- v: 2 | updated: 2026-05-03T00:00Z -->
+<!-- v: 3 | updated: 2026-05-03T00:30Z -->
 # 09. Pedido — работа с purchase orders
 
 **Что в файле:** домен `purchase.order` (закупки у поставщиков): источники, жизненный цикл, reconciliation paper PDF ↔ Odoo, action 1217 finalizer, supplierinfo learning, partner_id Verdnatura. Reception_algorithm — главный artefact в `add/09_reception_algorithm.md`.
@@ -82,7 +82,7 @@ draft (Holded import / bot Route 1)
 
 ## 5. Reception_algorithm — главный artefact
 
-**Spec:** [add/09_reception_algorithm.md](add/09_reception_algorithm.md) (current v19, 🟡 PRE-RESET, требует verify) + [add/09_reception_algorithm_v1.md](add/09_reception_algorithm_v1.md) (v1 baseline, 🟢 stable, для сравнения).
+**Spec:** [add/09_reception_algorithm.md](add/09_reception_algorithm.md) (current **v20**, 🟢 PROD-ready) + [add/09_reception_algorithm_v1.md](add/09_reception_algorithm_v1.md) (v1 baseline, исторический, для сравнения).
 
 **Содержит:**
 - Per-line decision tree (paper-truth, MIX consolidate, pack/stem, ⛔ placeholder, ×N inflation)
@@ -187,8 +187,8 @@ draft (Holded import / bot Route 1)
 
 | # | Что | Статус |
 |---|---|---|
-| 11.1 | Bulk-run reception_algorithm через все 188 pedidos | 🔴 (ждёт canonical версию алгоритма) |
-| 11.2 | Сравнение algorithm v1 vs v19 → выпуск v20 | 🟡 (owner делает в отдельном чате) |
+| 11.1 | Bulk-run reception_algorithm через все 188 pedidos | 🟡 (готов supervisor prompt — pilot 2-3 pedido → batch) |
+| 11.2 | Сравнение algorithm v1 vs v19 → выпуск v20 | ✅ done 2026-05-03 (v20 в проде) |
 | 11.3 | Bulk attach paper PDF к pedido (post-reset) | 🟡 готов INSTR |
 | 11.4 | Make.com bot Route 1 modernization (дубль-check, learned codes) | 🔴 |
 | 11.5 | OLD_ SKU awareness в bot для исторических pedido | 🔴 |

@@ -1,5 +1,7 @@
 <!-- v: 1 | updated: 2026-04-29T22:00Z -->
-# Verdnatura reception algorithm — Espafloria 2026
+# Verdnatura reception algorithm — v1 baseline (исторический)
+
+> **STATUS:** baseline для сравнения. Текущая prod-версия — `09_reception_algorithm.md` v20. Этот файл сохранён как первая зрелая формулировка процесса (commit 58ceaf63, 2026-04-30).
 
 Жёсткий алгоритм приёмки albaranes Verdnatura для свежей сессии Claude. Subagents следуют без отклонений. Supervisor (Claude в свежей сессии) калибрует на pilot и обновляет с owner approve.
 
