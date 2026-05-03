@@ -193,6 +193,7 @@ draft (Holded import / bot Route 1)
 | 11.4 | Make.com bot Route 1 modernization (дубль-check, learned codes) | 🔴 |
 | 11.5 | OLD_ SKU awareness в bot для исторических pedido | 🔴 |
 | 11.6 | Multi-warehouse split одного albarán | 🔴 (custom) |
+| 11.7 | **Post-bulk vendor price audit** (после full bulk Verdnatura ~167 pedido) — single subagent run: пройти все templates с >1 supplierinfo Verdnatura, применить scaled threshold (avg<3€ → ratio≤2.5+abs≤1.5; <8€ → 1.7+3; <20€ → 1.4+5; >20€ → 1.25+10), flag suspicious через `mail.activity` на template + `@Andriy` mention. Owner идёт по полкам / открывает activities → решает split / keep на каждой. Это catch-up на bookkeeper miss-matches которые subagent не отловил. | 🔴 (after bulk done) |
 
 ---
 

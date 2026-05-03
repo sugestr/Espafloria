@@ -1,4 +1,4 @@
-<!-- v: 21.5 | updated: 2026-05-03T12:00Z -->
+<!-- v: 21.6 | updated: 2026-05-03T13:00Z -->
 # Verdnatura Reception — Agent Specification
 
 **Audience:** autonomous reconciliation agent (subagent) обрабатывающий Verdnatura albaranes 2026.
@@ -377,17 +377,62 @@ Label всегда **сильнейшее actual evidence**. Precedence: `suppli
 
 **HIGH = ≥0.84.** Не downgrade learned vendor code или operator hit потому что Odoo card name ugly/legacy.
 
-#### §A2.7 Preserve existing card — DEFAULT bookkeeper's split (v21.4 strict)
+#### §A2.7 Preserve existing card — scaled price gate + flag suspicious (v21.6)
 
 **Default = keep bookkeeper's product_id assignment** даже если paper concepto на нескольких lines выглядит «похоже». Reject default ТОЛЬКО при выполнении ВСЕХ:
 
 1. **Hard species conflict** существует (rose↔tulip, eucalyptus cinerea↔parvifolia — разные species)
 2. ИЛИ **явно лучший candidate** найден на сильнейшем evidence (learned codigo / operator hit)
-3. **Price ratio ≤ 1.5** — `max(line.price_unit, candidate.template.price_avg) / min(...) <= 1.5`. Если ratio > 1.5 — **разные товары**, бухгалтер's split правильный, НЕ reassign.
+3. **Scaled price gate passes** (см. §A2.7.1)
 
-**Pilot 11 incident (2026-05-03):** subagent reassigned L2 (199106 BONS Ginseng Cerámica 37 cm, 16.75€) от 7126 (FICUS BONSAI - planta/25) к 7083 (FICUS BONSAI GINSENG con maceta cerámica) с ratio 16.75 / 9.61 = **1.74 > 1.5**. Бухгалтер видела разница (37 cm с керамикой vs другой бонсай) — её split был корректный. Subagent agressive consolidation = ошибка. **Не повторять**: ratio >1.5 → preserve.
+#### §A2.7.1 Scaled price gate (v21.6 — заменяет flat 1.5)
 
-**§B1a MIX consolidate criteria** уже содержат price ratio ≤ 1.5 — это **тот же gate** для решений consolidate vs preserve.
+Старый flat `ratio <= 1.5` равно работал для роз 0.5€ и для бонсая 15€. Это **некорректно**: для дешёвых товаров normal price spread выше (varieties rose 1.0↔1.8 = same MIX), для дорогих spread меньше (бонсай 9↔17 = разные products).
+
+```python
+def is_same_product(price_a, price_b):
+    """v21.6 scaled threshold — учитывает absolute + relative."""
+    avg = (price_a + price_b) / 2
+    ratio = max(price_a, price_b) / min(price_a, price_b)
+    abs_diff = abs(price_a - price_b)
+    
+    if avg < 3:        # very cheap (роза, gypso, аспарагус, paniculata stem)
+        return ratio <= 2.5 and abs_diff <= 1.5
+    elif avg < 8:      # mid (lilium, peonia, tulipan, plantas T12-T17)
+        return ratio <= 1.7 and abs_diff <= 3.0
+    elif avg < 20:     # expensive (cymbidium short, premium roses, BONS Ginseng)
+        return ratio <= 1.4 and abs_diff <= 5.0
+    else:              # very expensive (vases, decoración premium, multi-set boxes)
+        return ratio <= 1.25 and abs_diff <= 10.0
+```
+
+**Применение в reassign decision:** перед `write({'product_id': X})` если X != original — compute gate против existing supplierinfo на candidate template. **Pass → reassign OK. Fail → preserve bookkeeper.**
+
+#### §A2.7.2 Flag suspicious price spread (v21.6 NEW — catch bookkeeper errors)
+
+После Step 8 supplierinfo upsert на template — verify **gate против всех pairwise supplierinfo prices** на этой template (партнёр Verdnatura). Если хоть одна пара **fails gate** → bookkeeper потенциально put 2 разных products на одну card.
+
+```python
+suppliers_v = supplierinfo_by_tmpl[tmpl_id].filter(partner_id=42)
+prices = [si.price for si in suppliers_v if si.price > 0]
+if len(prices) >= 2:
+    # Pairwise check
+    for i in range(len(prices)):
+        for j in range(i+1, len(prices)):
+            if not is_same_product(prices[i], prices[j]):
+                # SUSPICIOUS — create activity на template
+                create_activity_on_template(tmpl_id, 
+                    summary=f'⚠️ Price spread suspicious: {min(prices)}€..{max(prices)}€',
+                    note=f'Card hosts {len(suppliers_v)} Verdnatura refs '
+                         f'with prices {sorted(prices)}. Possibly different products. '
+                         f'Visit shelf to verify identity.')
+                # break — one activity per template, не spam
+                break
+```
+
+**Pilot 11 incident retro (2026-05-03 после re-evaluation):** card 7126 (FICUS BONSAI - planta/25) держал refs 165850 (9.26€) и 199106 (16.75€). Pairwise: avg 13.0€ (expensive band), ratio 1.81 > 1.4, abs 7.49 > 5.0 — **fail gate**. Должна быть activity для review. После owner verify: 199106 reassigned на 7083 (FICUS BONSAI GINSENG con maceta cerámica) — корректное место. Это **именно тот тип ошибки** который scaled gate должен ловить.
+
+**§B1a MIX consolidate criteria** наследуют тот же scaled gate — алгоритм consolidate vs preserve unified.
 
 #### §A2.8 Matching algorithms (после identity gate passed)
 1. **Positional 1:1** — paper line[i] ↔ Odoo line[i], если N=M и порядок не нарушен
