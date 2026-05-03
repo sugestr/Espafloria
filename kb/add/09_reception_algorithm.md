@@ -1,4 +1,4 @@
-<!-- v: 21.4 | updated: 2026-05-03T11:00Z -->
+<!-- v: 21.5 | updated: 2026-05-03T12:00Z -->
 # Verdnatura Reception — Agent Specification
 
 **Audience:** autonomous reconciliation agent (subagent) обрабатывающий Verdnatura albaranes 2026.
@@ -295,6 +295,14 @@ update_record('purchase.order', pedido_id, {'x_studio_claude_finalize': True})
 sleep 10
 ```
 Verify: `state='purchase'` AND `picking.state='done'` → SUCCESS. Иначе FAIL → §E retry.
+
+**Action 1217 v8.0 (2026-05-03)** автоматически устанавливает retroactive delivery date:
+- `paper_fecha = pedido.date_order` (= paper.FECHA из Holded import)
+- Если `paper_fecha < (now - 7 days)` → `delivery_date = paper_fecha + 1 day` (старый pedido — typical supplier +1 day delivery)
+- Иначе → `delivery_date = now()` (свежий pedido)
+- Updates: `picking.date_done`, `stock.move.date`, `purchase.order.date_approve`
+- Stock-side only (`purchase_method='receive'` для цветов — bills отдельным flow)
+- Subagent **не должен** вручную писать эти даты — action 1217 делает.
 
 ### Step 11 — Post 3-layer summary + activity (§C2 + §C3) — **AGGREGATE, не re-analyze**
 

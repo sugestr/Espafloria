@@ -1,4 +1,8 @@
-# Server action: 🤖 Claude AI Reconcile Finalize  (v7.9)
+# Server action: 🤖 Claude AI Reconcile Finalize  (v8.0)
+# v8.0 (2026-05-03): retroactive delivery date — picking.date_done + stock.move.date +
+#                    purchase.order.date_approve. Logic: paper.fecha (=pedido.date_order
+#                    из Holded import) + 1 day если старше недели; иначе NOW. Stock-side
+#                    only (purchase_method='receive' для цветов, bills отдельным flow).
 # v7.9 (2026-05-01): hotfix — field rename `product_uom` → `uom_id` на stock.move в Odoo 19.
 #                    v7.8 падал с Invalid field 'product_uom' на pack lines.
 # v7.8 (2026-05-01): zero-backorder fix для pack lines + auto-cancel-delete backorder если возник.
@@ -186,6 +190,28 @@ for pedido in records:
                     picking.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).unlink()
                 except Exception as eb:
                     pedido.message_post(body="⚠️ backorder cleanup failed " + picking.name + ": " + str(eb), author_id=CLAUDE_AUTHOR)
+        # v8.0 (2026-05-03): retroactive delivery date (paper.fecha+1 для старых, NOW для свежих)
+        # Owner правило: если pedido старше недели — backdate +1 day (typical supplier delay).
+        # Если pedido в пределах недели — leave NOW. Применяется к picking.date_done +
+        # stock.move.date + purchase.order.date_approve. Stock-side only (purchase_method='receive'
+        # для цветов = bills отдельным flow). Use pedido.date_order = paper.FECHA (Holded import).
+        try:
+            now_dt = fields.Datetime.now()
+            week_ago = now_dt - datetime.timedelta(days=7)
+            paper_fecha = pedido.date_order
+            if paper_fecha and paper_fecha < week_ago:
+                delivery_date = paper_fecha + datetime.timedelta(days=1)
+            else:
+                delivery_date = now_dt
+            for picking in pedido.picking_ids:
+                if picking.state == 'done':
+                    picking.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write({'date_done': delivery_date})
+                    for move in picking.move_ids:
+                        if move.state == 'done':
+                            move.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write({'date': delivery_date})
+            pedido.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write({'date_approve': delivery_date})
+        except Exception as ed:
+            pedido.message_post(body="⚠️ retro date setting failed: " + str(ed), author_id=CLAUDE_AUTHOR)
         # Picking-done summary message + activity — subagent делает сам после verify
         pedido.with_context(tracking_disable=True, mail_create_nolog=True, mail_notrack=True).write({'x_studio_claude_finalize': False})
 
