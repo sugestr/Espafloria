@@ -1,4 +1,4 @@
-<!-- v: 3 | updated: 2026-05-03T00:00Z -->
+<!-- v: 4 | updated: 2026-05-03T17:30Z -->
 # 03. Inventory pipeline — приёмка и bill control
 
 **Что в файле:** техдок приёмки (`stock.picking` / `stock.move` слой, review-status, calculate_in_shop, sentinel -1) + bill control policy (`purchase` vs `receive`) + backorder logic. **Reconciliation слой** (бот + `purchase.order.line`) — отдельно в [02_makecom_bot.md](02_makecom_bot.md).
@@ -252,7 +252,90 @@ for record in self:
 
 ## 10. Кастомные поля на `purchase.order.line`
 
-5 полей (`x_studio_expected_qty`, `x_studio_item_comment`, `x_studio_operator_hit`, `x_studio_supplier_product_name`, `x_studio_supplier_sku`) — это домен pedido (заполняются ботом/агентом во время reconciliation). Полная таблица + описание — в [09_pedido § 8.1](09_pedido.md).
+### 10.1 Bot-written fields (5)
+
+Заполняются ботом/агентом во время reconciliation:
+
+- `x_studio_expected_qty`
+- `x_studio_item_comment`
+- `x_studio_operator_hit`
+- `x_studio_supplier_product_name`
+- `x_studio_supplier_sku`
+
+Полная таблица + описание — в [09_pedido § 8.1](09_pedido.md).
+
+### 10.2 Studio analytics fields — variable packs UoM workaround (v4 NEW, май 2026)
+
+**Проблема:** Verdnatura packs имеют **переменное** содержимое (3 stems/pack на одной поставке, 13 stems/pack на другой того же продукта). Odoo нативно ожидает **фиксированный** Paquete:Tallo коэффициент на product.template (по умолчанию 10:1). Это «catch weight» паттерн (рестораны, рыба, цветы).
+
+**Что есть в Odoo 19 нативно:**
+- `product.packaging` — только fixed-size packs (6-pack Coca-Cola). ❌ не подходит.
+- Lots tracking — каждая пачка как lot с custom-полем «stems»; операционно тяжело.
+- **Catch Weight** в core нет.
+
+**Третьесторонний модуль** ([Product Catch Weight (Inventory)](https://apps.odoo.com/apps/modules/19.0/product_catch_weight_inventory) от Kanak Infosystems): ✅ Odoo.sh, ✅ On Premise, ❌ **NOT compatible с Odoo Online**. Требует миграцию на Odoo.sh (one-way, против [99 §3](99_invariants.md)).
+
+**OCA:** catch weight модуля нет.
+
+**Наше решение (Odoo Online compatible):** Studio computed fields на purchase.order.line, обходящие static UoM conversion. Бот пишет правду в `x_studio_expected_qty` (per-line stem count), Studio fields пользуются им для корректных значений в UI/отчётах.
+
+#### 10.2.1 Поля
+
+| Field name | Type | Compute | Назначение |
+|---|---|---|---|
+| `x_studio_sales_price_now` | float (related) | `product_id.list_price` | Розничная цена в магазине ex IVA |
+| `x_studio_margin_x_1` | float (computed) | `list_price / cost_per_stem`, где `cost_per_stem = price_unit × product_qty / expected_qty` (с fallback на product_qty) | Множитель маржи (target ×3 retail) |
+| `x_studio_margin_x_display` | char (computed) | `×{margin:.1f}` для stem; `×{margin:.1f} 🌻 {cost_per_stem:.2f}` для pack (где expected_qty ≠ product_qty) | Badge-friendly текст; 🌻 = «расчёт per-stem из пачки» |
+| `x_studio_qty_received_stems` | float (computed) | `sum(move.quantity for done moves)` | Реальный приход в стеблях (через picking truth) |
+| `x_studio_unit_price_per_stem` | float (computed) | `price_subtotal / expected_qty` (fallback на product_qty) | Реальная цена за стебель |
+
+Все computed, `store=False`, `readonly=True`.
+
+#### 10.2.2 Visual decoration на pedido form (4-tier)
+
+Margin × badge на `x_studio_margin_x_display` использует пороги синхронизированные с spec [§A2.7.3](add/09_reception_algorithm.md):
+
+| Margin × | Цвет | Семантика | Бот действие |
+|---|---|---|---|
+| < 1.5 | 🔴 red | убыток / cost ≥ price | gate `override_to_paper` (если loss) или `blocker_c` |
+| 1.5 — 2.5 | 🟡 yellow | тонко, ниже target | normal flow |
+| 2.5 — 10 | 🟢 green | норма | normal flow |
+| ≥ 10 | 🔵 blue | подозрительно высоко | gate `high_soft_flag` — activity, no override |
+
+#### 10.2.3 Скрытые стандартные поля Odoo
+
+Через `optional="hide"` в Studio inheritance views (toggle вернёт):
+
+**На `purchase.order.line` tree (pedido form):**
+- `qty_received` — конвертит stems → packs через static factor (для pack-линии 3 stems показывает 0.3 packs).
+
+**В `purchase.history.list` (action 756 — Purchase History на product form):**
+- `product_uom_qty` (Quantity) — то же: 4 packs × 10 = 40 (статически), реально пришло 13 stems.
+- `price_unit_product_uom` (Unit Price) — `price_unit / 10` = 0.27, реально 0.83 €/stem.
+
+#### 10.2.4 Расхождение `expected_qty ≠ qty_received_stems`
+
+Если эти поля не совпадают на done-pedido — это **маркер post-validation correction**:
+
+1. Retro-fix вручную через MCP (manual quant adjustment вне picking flow).
+2. Owner пересмотрел расчёт бухгалтера задним числом.
+3. Bot-gate сработал post-factum — §A2.7.3 override после picking validation.
+
+Любой случай = «знаем правду, но в `move.quantity` остался старый value». Полезный инвариант для аудита.
+
+#### 10.2.5 Что НЕ затронуто (структурно точно)
+
+После того как товар прошёл receipt:
+- `stock.quant` (текущий остаток) в Tallo ✅
+- `stock.move.quantity` после picking в Tallo ✅
+- Inventory Reports / Inventory Valuation ✅
+- Sales Order Lines / POS / Sales Analysis / Margin reports — всё в Tallo ✅
+
+UoM-distortion живёт **только** в 5 purchase-incoming view'ах (3 уже скрыты Studio'м, остальные 2 — Vendor Bills qty display и Purchase Analysis pivot — могут быть закрыты по запросу через те же inherit views).
+
+### 10.3 Mirrors
+
+Ничего custom Python — все поля и view edits через Studio (UI или MCP `ir.model.fields` + `ir.ui.view` updates). Нет `.py` mirrors.
 
 ---
 
@@ -260,7 +343,7 @@ for record in self:
 
 | # | Что | Статус |
 |---|---|---|
-| 11.1 | `qty_received` + `qty_invoiced` в Studio view | 🔴 (2 минуты в UI) |
+| 11.1 | `qty_received` + `qty_invoiced` в Studio view | ✅ done (10.2.3 — qty_received скрыт, заменён на `x_studio_qty_received_stems`) |
 | 11.2 | Визуальная подсветка расхождений (`product_qty != qty_received` → красный) | 🔴 |
 | 11.3 | Блокировка Validate при критических отклонениях | 🔴 |
 | 11.4 | Native Barcode receipts UX для флориста на планшете | 🔴 (закрывается штатно — Odoo 19 Barcode app) |
