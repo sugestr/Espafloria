@@ -1,5 +1,7 @@
-<!-- v: 20.1 | updated: 2026-05-03T01:00Z -->
+<!-- v: 20.2 | updated: 2026-05-03T03:00Z -->
 # Verdnatura Reception — Agent Specification
+
+**v20.2 changelog (vs v20.1):** правки на основе pilot 1/2/3 (12254925 / 12241558 / 12211205) от 2026-05-03. (1) §A4 +categ 293 EQUIPAMIENTO + decision matrix categ_id. (2) §A5 — Odoo 19 fields (`type='consu', is_storable=True`), `uom_po_id` только на supplierinfo, `sale_ok=False` обязательно, `list_price ≠ 0`. (3) §A6 — skip dynamic attrs на MIX-templates + safety check unarchive default variant. (4) §A3.3 image_1920 fetch на existing если пусто. (5) §A3.6 (NEW) supplierinfo on color/size variants — pin `product_id`. (6) §B2 yellow path explicit `x_studio_review_color=3`. (7) §A2.3 OZOTHAMNUS=Flor de Arroz example. (8) §3 Step 2 multi-albarán PDF support.
 
 **Audience:** autonomous reconciliation agent (subagent) обрабатывающий Verdnatura albaranes 2026.
 
@@ -101,6 +103,19 @@ Extract:
 **Validity check**: если pdftotext не содержит keywords {`Cant`, `Concepto`, `Total`} → BLOCKER C (битый PDF).
 
 Sanity: `Σ(Cant × PVP) ≈ Subtotal`; `Subtotal × (1 + IVA) ≈ Total`.
+
+**§3 Step 2.1 Multi-albarán PDF (v20.2)**: paper PDF может содержать несколько albaranes (factura format с N albaranes на одну invoice — например factura A12610404 содержит 12297344 / 12277169 / 12281779 / 12287826 / 12294902 / ...).
+
+Detection:
+- В text есть **multiple** `Albarán <docNum>` headers (regex `Albarán\s+\d{8}`) → multi-albarán mode
+- ИЛИ paper PDF имеет word `Factura A\d+` в header (вместо `ALBARÁN`)
+
+Workflow в multi-albarán mode:
+1. Найти target docNum через `re.search(r'Albarán\s+' + target_docnum + r'.*?(?=Albarán\s+\d{8}|Subtotal|$)', text, re.DOTALL)`
+2. Парсить только ЭТУ секцию (lines + subtotal + IVA)
+3. Если target docNum НЕ найден в PDF → BLOCKER C «paper PDF не содержит target albarán».
+
+Supervisor может **починить paper PDF** (extract pages, replace attachment) — см. handover (TBD: future doc) для recipe. Алгоритм agent просто работает с тем что прицеплено, и legalно блокирует если не находит.
 
 ### Step 3 — Warehouse address check (§A1)
 Сравни paper «Dirección de entrega» с `purchase.order.picking_type_id.warehouse_id`.
@@ -209,6 +224,10 @@ Match только когда specific narrow species/type plausibly the same.
 
 Примеры OK: freesia soleil↔freesia rosario; rose Mondial↔rose Pretty Pillow; bamboo прямой↔bamboo крученный; photinia red robin↔generic «PHOTINIA» (если supplierinfo подтверждает).
 
+**Latin↔Spanish common names — valid identity flexibility (v20.2):**
+- OZOTHAMNUS diosmifolius ↔ Flor de Arroz / F Arroz Pink (rice flower) — paper «F Arroz Pink», Odoo card `🚫 OZOTHAMNUS - flor` с `codigo_fabrica` «ARROS, FLOR DE ARROZ, ARR» — identity OK, не reassign.
+- Когда `codigo_fabrica` содержит aliases / synonyms / botanical+common names — это explicit **trained identity flexibility**, использовать как evidence #4 (fabrication code) per §A2.4.
+
 #### §A2.4 Evidence priority (от сильного к слабому)
 1. **Learned codigo** — `supplierinfo(partner=42, product_code=paper.ref)` указывает на template совпадающий с Odoo line.product_id
 2. **Operator hit** — `x_studio_operator_hit == paper.ref`
@@ -269,6 +288,7 @@ Card type (placeholder/quarantine/normal) **не критерий**. Не тер
 |---|---|---|
 | `description_purchase` | Всегда если empty | `Auto-enriched from paper {ref} {date}: {concepto} ({productor}). Атрибуты: {ALTURA/COLOR/MACETA/PESO/Nº FLORES — те что есть}` |
 | `x_studio_codigo_fabrica` | Если empty — записать paper.ref. Если non-empty — append через `;` если ref не уже там | sequence Verdnatura refs обслуженных этой картой |
+| `image_1920` (v20.2) | На existing template если **`image_1920=False` AND есть paper.ref** | `set_binary_field(source='https://cdn.verdnatura.es/image/catalog/1600x900/<paper.ref>')`, 404 → leave empty. Дёшево, free improvement каталога — фотка появляется при первом upsert на existing card. |
 
 **Mandatory chatter log на template** при ЛЮБОМ изменении (description/codigo/name/supplierinfo) — см. §C5. **Особенно** при создании новой карточки — обязательно ПРИЧИНА (см. §C5).
 
@@ -278,15 +298,59 @@ Card type (placeholder/quarantine/normal) **не критерий**. Не тер
 #### §A3.5 Multi-ref на одну card (MIX consolidate)
 Если N paper.ref'ов матчат одну Odoo MIX-card — создаём **N supplierinfo записей** на тот же template с разными product_code. Это **feature, не bug** — карточка обучается N codigo одновременно. MIX между поставщиками (Verdnatura + Serviflor + Rillo с разными codigo на одну template) тоже OK — не разрушать чужие supplierinfo.
 
+#### §A3.6 Supplierinfo на color/size variants (v20.2 NEW)
+
+Когда card имеет variants (Color / Size / Color×Size combinations) и codigo per variant unique — supplierinfo должна **pin product_id** (variant), а не только product_tmpl_id.
+
+**Правило:**
+- Если paper даёт **один codigo** на template (без разделения по variant) → `product_id=False`, `product_tmpl_id=<id>` — applies to all variants
+- Если paper даёт **разные codigos на разные variants** (как Caja Symphony Negro 68103 vs Rojo 67808) → `product_id=<variant_id>`, `product_tmpl_id=<id>` — pin к specific variant
+
+**Пример (pilot 3 → retro-fix Caja Symphony 6 SKU):**
+- 6 variants на template 7856 (Color × Size: 2 colors × 3 sizes)
+- Paper.ref 68103 (Negro) → 3 supplierinfo на 3 size variants Negro: pin product_id=8335 (Negro+Grande), 8336 (Negro+Mediano), 8337 (Negro+Pequeño)
+- Paper.ref 67808 (Rojo) → 3 supplierinfo на 3 size variants Rojo: pin product_id=8338, 8339, 8340
+
+Иначе supplierinfo template-level applies to ALL 6 variants — collision при purchase planning.
+
 ### §A4 Carantine categories
-- 207 — root «⛔ Карантин Holded»
-- 210 — EMBALAJE
-- 211 — ENTREGA
-- 212 — FLORES CORTADAS (срезка)
-- 213 — PLANTAS EN MACETAS (горшечные)
-- 214-279 — спец. подразделы
-- 280 — DECORACION
-- 281 — PRODUCTO DESCONOCIDO
+
+```
+207 ⛔ Карантин Holded (root)
+├── 208 Consumibles (расходники)              ← oasis, бумага, бечевик
+├── 209 DECORACION Y ADORNOS (parent)         ← multi-use декор
+│   └── 216-246 (ACCESORIOS DECORATIVOS, ADORNOS DE PAPEL, NAVIDEÑOS, ...)
+├── 210 EMBALAJE (упаковка) (parent)          ← одноразовая упаковка
+│   └── 247 BOLSAS / 248 CINTAS / 249 EMBALAJE / 250 OASIS / 251 TARJETAS / 252 VBOX(CAJAS)
+├── 211 ENTREGA (parent)
+│   └── 253-258 (BCN-EXPRES, OTRAS, TAXI-GLOVO, ZONA 1/2/3)
+├── 212 FLORES CORTADAS (parent)              ← товар-срезка
+│   └── 259 BAMBU / 260 BAYAS / 261 CONIFERAS / 262 CORONAS / 263 FLORES VARIADAS /
+│       264 SECAS / 265 FRUTAS,VERDURAS / 266 RAMAS,FOLLAJE / 267 ROSA RAMIFICADA / 268 ROSA UNIFLORA
+├── 213 PLANTAS EN MACETAS (parent)           ← товар-горшечная
+│   └── 269 CACTUS / 270 AÉREAS / 271 AROMÁTICAS / 272 BULBOSAS / 273 COLGANTES /
+│       274 CON FLORES / 275 FOLLAJE / 276 FRUTALES / 277 NAVIDEÑAS / 278 TERRAZA / 279 SUCULENTAS
+├── 214 PRODUCTOS ESPECIALES (parent)
+│   └── 280 DECORACION / 281 PRODUCTO DESCONOCIDO / 282 PRODUCTO POR ENCARGO /
+│       283 RAMO DESCONOCIDO / 284 REDONDEO / 285 SERVICIO DE FLORISTA
+└── 293 EQUIPAMIENTO (оборудование) ← v20.2 (после pilot 2 retro-fix Tijeras)
+                                       ← многоразовые инструменты, не товар, не расходник
+```
+
+#### §A4.1 Decision matrix categ_id для card create (v20.2)
+
+| concepto pattern (case-insensitive) | categ_id | examples |
+|---|---|---|
+| flores срезка: rama / hoja / herbacea / flor / ramo / bouquet | **212** или подкатегории 259-268 | Rosas, Clavel, Eucalipto, Bambu, Photinia, Astilbe |
+| plantas en macetas: planta / planta T## / planta/cm | **213** или подкатегории 269-279 | Phalaenopsis, Ficus Ginseng, Sedum, Succulentus |
+| упаковка одноразовая: Bolsa / Bolso / Caja paper / VBOX / Cesta single-use / Tarjeta / Cinta | **210** или 247-252 | Bolsa Nature, VBOX paper round, Caja Symphony |
+| расходники: Oasis / spray / gel / pegamento / Algodón / Esponja / бумага floristica | **208** или 250 (OASIS) / 251 (TARJETAS) | Oasis, Mini-bag |
+| **многоразовое оборудование: Tijera / Cuchillo / Pinza / Cubos / Soporte / Caballete / Secador / Maceta multi-use** | **293** | Tijera Ippon, Tijera Podar, Cubos Expositor |
+| декор многоразовый: Florero / Vase / Jarrón / Candelabra / Cesta multi-use | **209** или 280 | Cesta Piel, Jarrón Diábolo |
+| entrega/доставка | **211** или 253-258 | — |
+| неопознанное (нет identity match): generic «producto» / нет concepto | **281** или 283 | — |
+
+**Heuristic порядок**: пройти по строкам сверху вниз, первое совпадение wins. «Многоразовое оборудование» (293) проверять до «декор» (280) — Tijera уйдёт в правильную, не в декор.
 
 ### §A5 Card create (§B1A когда нужна new card)
 
@@ -296,18 +360,27 @@ Card type (placeholder/quarantine/normal) **не критерий**. Не тер
 |---|---|
 | `name` | `🚧🟠 <paper.concepto>` |
 | `default_code` | `MAX(default_code regex '^84001\d{3}$') + 1` |
-| `barcode` | `default_code` если categ=212 (FLORES CORTADAS); manufacturer barcode допустим если categ ∈ {213, 280, 210} |
-| `categ_id` | по типу (§A4) |
-| `type` | `'product'` |
-| `list_price` | 0 |
-| `standard_price` | paper.PVP |
-| `uom_id` / `uom_po_id` | 1 (Tallo) или 31 (Paquete) по UD VENTA |
+| `barcode` | `default_code` если categ=212 (FLORES CORTADAS); manufacturer barcode допустим если categ ∈ {213, 280, 210, 293, 209} |
+| `categ_id` | по §A4.1 decision matrix |
+| `type` | `'consu'` (Odoo 19 — НЕ `'product'`, устарело) |
+| `is_storable` | `True` (Odoo 19 для tracking inventory) |
+| **`sale_ok`** | **`False`** (v20.2 — карантин не продаётся в живом POS до promotion в clean) |
+| `purchase_ok` | `True` |
+| `list_price` | **0 OK** (v20.2) — но §C5 chatter ОБЯЗАН содержать warning «⚠️ Sales price not set, нужно установить до promotion в clean catalog» + activity упоминание |
+| `standard_price` | paper.PVP (опционально — Odoo сам подхватит из supplierinfo при первом receive) |
+| `uom_id` | 1 (Tallo) или 31 (Paquete) по UD VENTA. **Поле `uom_po_id` НЕ существует на product.template в Odoo 19** — оно только на `product.supplierinfo`. |
 | `purchase_method` | `'receive'` |
 | `description_purchase` | `Auto-created by Claude AI <date> from paper {ref} {concepto} {productor}. Атрибуты: {paper sub-line attrs}` |
 | `x_studio_codigo_fabrica` | paper.ref |
 | **`image_1920`** | `set_binary_field(source='https://cdn.verdnatura.es/image/catalog/1600x900/<paper.ref>')`, 404 → leave empty |
 
 После create — **mandatory chatter с ПРИЧИНОЙ** (см. §C5) + supplierinfo upsert (§A3).
+
+#### §A5.1 Odoo 19 quirks (pilot 1+2 confirmed)
+
+- **Field rename**: `'type': 'product'` устарело → используй `type='consu', is_storable=True`. Подтверждено образцом existing card 8212 в каталоге.
+- **`uom_po_id` нет на template**: ставь uom только через `uom_id`. Для per-supplier uom — на `product.supplierinfo.uom_id`.
+- **`product_template_id` нет на purchase.order.line**: используй `product_id.product_tmpl_id` для template lookup из line.
 
 ### §A6 Native Odoo product.attribute mapping
 
@@ -372,6 +445,39 @@ for tag, raw_value in parsed.items():
 ```
 
 ATTR_MAP — константа в коде агента из таблицы выше.
+
+#### §A6.1 Skip dynamic attributes на MIX-templates (v20.2)
+
+**Не добавлять** dynamic attribute_lines (Color id=11, Altura id=13, Maceta id=15, Nº Flores id=16, Tamaño Flor id=23, Diámetro id=21) на template если выполнено **любое** условие:
+
+1. **Name detector** — `template.name` содержит `MIX`, `- MIX -`, `mixed`, `РСР `, `RSR `, `varied` (case-insensitive)
+2. **Distribution detector** — N paper lines на этом template распределены с **N разными** values одного dynamic attribute (например: 4 paper CL refs с разными Color: Verde/Salmón/Rosa/Mixto на одной CLAVEL MIX template — distinct combination каждой невозможен)
+3. **Multi-species detector (v20.2)** — `codigo_fabrica` содержит >2 разных species/common-name aliases (например MARFULL = Madroño + Arbutus + Photinia на одной card — это de-facto multi-species template)
+
+**Что делать вместо**: записать атрибуты только в `description_purchase` text + `x_studio_supplier_product_name` line + `x_studio_codigo_fabrica` (refs list). NO `attribute_line.create`.
+
+**Почему**: добавление dynamic attribute_line на template без single combination → Odoo автоматически архивирует default variant → existing PO lines / stock на default variant остаются на archived → bookkeeper UI confused (ARCHIVED banner). См. pilot 2 incident: CLAVEL MIX (template 7293) — variant default архивирован, retro-fix unarchive потребовался.
+
+**`no_variant` атрибуты OK** (UD Venta id=14, Nº Tallos id=17, Tamaño Botón id=18, Botón Mínimo id=19, Botón id=20, Peso/Tallo id=22, Longitud Brote id=24, Ancho Superior id=25, Ancho Inferior id=26, Grosor id=27, Peso id=28) — variants не создают, archive не происходит.
+
+#### §A6.2 Safety check — unarchive default variant after attribute_line write (v20.2)
+
+После любого `product.template.attribute.line.create` или `value_ids` update (для **не-MIX** templates):
+
+```python
+# verify variant integrity
+template = env['product.template'].browse(tmpl_id)
+if template.product_variant_count == 0:
+    # default variant archived by Odoo cascade — restore
+    archived_default = env['product.product'].search(
+        [('product_tmpl_id','=',tmpl_id),('active','=',False),('product_template_attribute_value_ids','=',False)],
+        limit=1
+    )
+    if archived_default:
+        archived_default.write({'active': True})  # safety net
+```
+
+Сценарий: Odoo при добавлении dynamic attribute_line на template archive'ит default variant если новые variants ещё не созданы. Pilot 2 поймал это incident'ом, retro-fix потребовался.
 
 ---
 
@@ -466,11 +572,13 @@ else:  # stem
 | Сравнение | Action | review_color |
 |---|---|---|
 | Δ ≤ tolerance в любую сторону | accept что есть silent | ✅ green |
-| Odoo > paper, Δ > tolerance, ≤ MAJOR_THRESHOLD | accept Odoo silent (бухгалтер пересчитал, +N от поставщика) | 🟡 yellow (silent в комментарии, без activity) |
+| Odoo > paper, Δ > tolerance, ≤ MAJOR_THRESHOLD | **`product_qty=paper.cant`** (для G4/G5 sum gate), **`x_studio_expected_qty=Odoo_old`** (physical recount). v20.2: Phase A2 picking handles physical excess через expected_qty. | 🟡 yellow (silent в комментарии, без activity) |
 | Odoo < paper, Δ > tolerance | paper-truth override + activity «бумага говорит +N, физически проверь» | 🟡 yellow |
 | Δ ekstrем (>50% paper) AND нет signals pack/digit-loss | проверить §F детекторы (digit-loss / lost / extra). Если детектор не сработал → BLOCKER C | 🔴 red |
 
 `MAJOR_THRESHOLD = max(15, int(paper.qty * 0.30))`.
+
+**§B2.1 Yellow path explicit color write (v20.2):** для yellow case (Odoo>paper accept-silent OR paper-truth override) — **обязательно** `move.write({'x_studio_review_color': 3})` ПОСЛЕ `button_confirm()` создал picking. Default value `0` или `10` (green) не подходит для color-аудита и for action 1217 gate logic. Найти соответствующий stock.move через `purchase_line_id == line.id` после picking creation.
 
 #### Decision matrix (pack)
 | Сравнение | Action | review_color |
@@ -612,6 +720,10 @@ AGGREGATE из working context (см. Step 11). НЕ re-analyze paper-vs-Odoo.
 
 **Только при наличии 🟠 или 🔴 строк** (yellow silent). **Тоже AGGREGATE** из тех же `orange_list` / `red_list` собранных в Step 11 — не пересчитываем.
 
+**Одна activity на pedido даже при N blockers (v20.2):** не создавать N отдельных activity records (по одной на blocker). Создавать **одну** activity с numbered list внутри note. Owner получает один уведомление с full list to resolve, не N мелких. Если N pack BLOCKERs (как pilot 4: 5 pack без recount) — все 5 в один note с separate `<li>` per blocker.
+
+**При новых cards в pedido — упомянуть в activity note (v20.2):** добавить отдельный bullet «⚠️ Создал N новых cards (84001XXX, 84001YYY) — установи sales price перед promotion в clean catalog» если N > 0.
+
 ```html
 <p><b>Pedido <docNum> — простыми словами:</b></p>
 <p>1-2 предложения почему оранжевые/красные (из patterns + counts).</p>
@@ -661,6 +773,8 @@ AGGREGATE из working context (см. Step 11). НЕ re-analyze paper-vs-Odoo.
 <p><b>Где искал:</b> robo-cards (84001*, 84009*), чистая зона по concepto, learned supplierinfo codes Verdnatura. Не нашёл нигде.</p>
 
 <p><b>Что создал:</b> карточку в карантине FLORES CORTADAS (212), default_code=84001345, name='🚧🟠 Acacia Mimosa Bola', с фоткой Verdnatura.</p>
+
+<p><b>⚠️ Sales price не установлена</b> (`list_price=0`, `sale_ok=False`). Карта пока в карантине, не sellable. Перед promotion в clean catalog — установи sales price вручную (для retail обычно cost × markup 1.5-3).</p>
 
 <p><code>[Лог] paper_ref=165920 pedido=12491307 search=robo,clean,supplierinfo categ=212 seq=84001345 image_url=cdn.verdnatura.es/.../165920</code></p>
 ```
