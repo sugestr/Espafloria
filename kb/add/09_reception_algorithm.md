@@ -1,4 +1,4 @@
-<!-- v: 21.8 | updated: 2026-05-03T16:00Z -->
+<!-- v: 21.9 | updated: 2026-05-03T19:30Z -->
 # Verdnatura Reception — Agent Specification
 
 **Audience:** autonomous reconciliation agent (subagent) обрабатывающий Verdnatura albaranes 2026.
@@ -477,6 +477,14 @@ def stem_qty_gate(line, paper_cant, expected_qty, list_price, price_unit):
     if margin_via_recount >= 10.0:
         return ('high_soft_flag', f'Margin ×{margin_via_recount:.1f} необычно высоко. Возможно устарел list_price на карточке, или вендорский бонус (recount > paper). Не override, но проверь.')
     
+    # v21.9 NEW: large divergence on stem without margin signal — no auto-decision
+    rel_diff = abs(paper_cant - expected_qty) / max(paper_cant, expected_qty)
+    if rel_diff > 0.30:
+        return ('large_divergence_no_override',
+                f'Stem-line: paper={paper_cant}, bookkeeper={expected_qty} (divergence {rel_diff*100:.0f}%). '
+                f'Margin sane в обоих сценариях (×{margin_via_paper:.1f} vs ×{margin_via_recount:.1f}), '
+                f'не уверен кто прав. Не override — owner physical verify.')
+    
     return ('keep', None)
 ```
 
@@ -493,6 +501,21 @@ def stem_qty_gate(line, paper_cant, expected_qty, list_price, price_unit):
 - `expected_qty` НЕ override — recount скорее всего верный, проблема в list_price freshness или это legit бонус.
 - color = 🟠 orange (требует ревью).
 - activity на pedido: «Строка X: margin ×{m:.1f} необычно высоко. Проверь list_price на карточке (может устарел) ИЛИ это вендорский бонус (recount > paper — норма). Сделай решение.»
+
+**Action на `large_divergence_no_override` (v21.9 NEW):**
+- `expected_qty` НЕ trogaem (keep bookkeeper input as default — что бухгалтер записал).
+- `product_qty` = paper.cant (paper-truth для bill).
+- color = 🟠 orange.
+- activity на pedido: «Stem-line N: paper={X}, bookkeeper={Y} (divergence {pct}%). Margin sane в обоих сценариях — бот не уверен кто прав. Физически проверь сколько реально пришло.»
+
+**Когда срабатывает (vs другие gates):**
+- Расхождение >30% на stem-линии при paper.cant ≥ 5
+- Margin **в обоих сценариях** sane (между 1.0 и 10.0) — иначе сработали бы LOSS / HIGH gates
+- Pack lines не applies (для них divergence = ожидаемое поведение detector pack-conv)
+
+**Принцип:** **«не уверен → не решай»**. Бот не должен молча принимать сторону, которая может быть случайно правильной. Расхождение ×2 (как ALLIUM 20↔40 или ASPIDISTRA 10↔5) — слишком много чтобы пройти мимо.
+
+**Pilot retro 12210647 (2026-05-03):** обе линии (ALLIUM и ASPIDISTRA) были закрыты yellow silent. Должны были orange + activity. Retro-fixed: stock.move color 3→2, activity создана на каждую. См. activities 323, 324 на pedido 47828.
 
 **Когда НЕ срабатывает (legit cases):**
 - Pack lines (uom=Paquete): не applies, для pack divergence — это ожидаемое поведение (paper packs ≠ recount stems).
@@ -511,6 +534,8 @@ Studio decoration на `Margin ×` синхронизирован со spec gate
 | ≥ 10 | 🔵 blue | подозрительно высоко | gate `high_soft_flag` — activity, без override |
 
 **Принцип:** **оба** края (×<1.5 и ×≥10) подозрительны для бота, оба триггерят activity на pedido. Разница в действии: low → override qty, high → не трогаем qty, флагуем list_price.
+
+**Дополнительно (v21.9):** даже если margin в обоих сценариях sane, **расхождение qty paper vs bookkeeper >30% на stem-линии** = orange + activity (gate `large_divergence_no_override`). Бот не молча выбирает чью сторону держать — owner verify обязателен. Это закрывает класс ошибок типа ALLIUM (paper 20 / bookkeeper 40 = vendor-bonus или import-bug) и ASPIDISTRA (paper 10 / bookkeeper 5 = loss или recount-error) которые margin gate не ловит.
 
 **Pilot retro:** этот gate retroactively применён к ref 57603 на pedido 47812 — `expected_qty 1→40`, +39 stems в BLA/Stock, color 🟡→🟠, activity создана. См. chatter 19111.
 
