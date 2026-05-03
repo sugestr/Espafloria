@@ -1,4 +1,4 @@
-<!-- v: 21.6 | updated: 2026-05-03T13:00Z -->
+<!-- v: 21.7 | updated: 2026-05-03T14:30Z -->
 # Verdnatura Reception — Agent Specification
 
 **Audience:** autonomous reconciliation agent (subagent) обрабатывающий Verdnatura albaranes 2026.
@@ -570,7 +570,7 @@ else:
 | `is_storable` | `True` (Odoo 19 для tracking inventory) |
 | **`sale_ok`** | **`False`** (v20.2 — карантин не продаётся в живом POS до promotion в clean) |
 | `purchase_ok` | `True` |
-| `list_price` | **0 OK** (v20.2) — но §C5 chatter ОБЯЗАН содержать warning «⚠️ Sales price not set, нужно установить до promotion в clean catalog» + activity упоминание |
+| `list_price` | **`round(paper.PVP * 3 / 1.21, 2)`** (×3 markup ex IVA — стандартная розничная наценка Espafloria, IVA снимается т.к. tax mode = `tax_excluded` → list_price хранится ex IVA, customer-facing цена = list_price × 1.21). При нестандартных категориях (EQUIPAMIENTO, PUBLICIDAD) markup ставится 0 — owner-resolve через activity. |
 | `standard_price` | paper.PVP (опционально — Odoo сам подхватит из supplierinfo при первом receive) |
 | `uom_id` | 1 (Tallo) или 31 (Paquete) по UD VENTA. **Поле `uom_po_id` НЕ существует на product.template в Odoo 19** — оно только на `product.supplierinfo`. |
 | `purchase_method` | `'receive'` |
@@ -578,7 +578,49 @@ else:
 | `x_studio_codigo_fabrica` | paper.ref |
 | **`image_1920`** | `set_binary_field(source='https://cdn.verdnatura.es/image/catalog/1600x900/<paper.ref>')`, 404 → leave empty |
 
-После create — **mandatory chatter с ПРИЧИНОЙ** (см. §C5) + supplierinfo upsert (§A3).
+После create — **mandatory chatter с ПРИЧИНОЙ** (см. §C5) + supplierinfo upsert (§A3) + **activity на pedido** (см. §A5.3 «New card → physical price tag reprint»).
+
+#### §A5.3 New card → physical price tag reprint activity (v21.7 NEW)
+
+**Каждая** новая карточка, создаваемая ботом во время приёмки, означает: в магазине физически уже лежит этот товар (бухгалтер его прокатил по бумаге, picking сделан, quant создан), но **со старым ценником** или **без ценника вообще**. Owner должен найти его и переклеить.
+
+Поэтому: **на каждую новую quarantine-карту бот создаёт activity на pedido** с конкретными данными для переклейки.
+
+```python
+mcp__odoo__create_record('mail.activity', {
+    'res_model_id': 819,           # purchase.order
+    'res_id': pedido_id,
+    'activity_type_id': 4,         # To-Do
+    'user_id': 2,                  # Andriy
+    'date_deadline': (date.today() + timedelta(days=7)).isoformat(),
+    'summary': f"🛍️ Новая карточка {tmpl_id} — найти {short_name} в магазине + переклеить ценник",
+    'note': html_template_below,   # см. ниже
+})
+```
+
+**HTML шаблон note:**
+```html
+<p><b>Причина:</b> в этом albaran пришло <code>{paper.ref} {paper.concepto}</code> — товар, для которого в каталоге не было подходящей карточки. Создал новую quarantine-карту {tmpl_id}, прицепил к строке pedido.</p>
+
+<p><b>Что сделать в магазине:</b></p>
+<ul>
+  <li>Найти физически {short_name} (склад: {warehouse_name}).</li>
+  <li>Напечатать новый ценник:<br/>
+    — SKU: <code>{default_code}</code><br/>
+    — Barcode: <code>{barcode}</code><br/>
+    — Цена: <b>{round(list_price * 1.21, 2)}€</b> con IVA ({list_price}€ ex IVA × 1.21)</li>
+  <li>Переклеить ценник (снять старый если был на этом экземпляре).</li>
+  <li>В Odoo: открыть карточку, проверить — нужно ли поднять/снизить розничную цену под наш фактический рынок (бот ставит ×3 от закупки как стартовый baseline, не как утверждённую розницу).</li>
+</ul>
+
+<p><b>Связь:</b> template <a href="/odoo/products/{tmpl_id}">{tmpl_id}</a>, supplierinfo {paper.ref} (vendor_code), pedido {pedido_id}.</p>
+```
+
+**Где взять `warehouse_name`:** `pedido.picking_type_id.warehouse_id.name` (e.g. "Augusta 109", "Salamanca").
+
+**Idempotency:** если на pedido уже висит activity с таким же `summary` (новая карточка для того же tmpl_id) — **не дублировать**. Один pedido может породить несколько таких activity (одна на каждую новую карту).
+
+**Семантика для owner:** **«новая карточка = повод физически найти товар в магазине и переклеить ценник на новый SKU/barcode/цену»**. Это закрывает gap между бот-приёмкой (которая создала карту в Odoo) и физической реальностью (где товар лежит со старой/чужой бирочкой).
 
 #### §A5.1 Odoo 19 quirks (pilot 1+2 confirmed)
 
@@ -1195,7 +1237,9 @@ AGGREGATE из working context (см. Step 11). НЕ re-analyze paper-vs-Odoo.
 
 <p><b>Что создал:</b> карточку в карантине FLORES CORTADAS (212), default_code=84001345, name='🚧🟠 Acacia Mimosa Bola', с фоткой Verdnatura.</p>
 
-<p><b>⚠️ Sales price не установлена</b> (`list_price=0`, `sale_ok=False`). Карта пока в карантине, не sellable. Перед promotion в clean catalog — установи sales price вручную (для retail обычно cost × markup 1.5-3).</p>
+<p><b>Pricing baseline:</b> закуп 0.55€ → list_price = 1.36€ ex IVA = 1.65€ con IVA (×3 markup ex IVA, формула paper.PVP × 3 / 1.21). `sale_ok=False` пока в карантине. Перед promotion в clean — owner может скорректировать розницу под фактический рынок.</p>
+
+<p><b>Activity:</b> создана на pedido 12491307 — найти товар в магазине + переклеить ценник на новый SKU 84001345 / barcode 84001345 / цена 1.65€ con IVA (см. §A5.3).</p>
 
 <p><code>[Лог] paper_ref=165920 pedido=12491307 search=robo,clean,supplierinfo categ=212 seq=84001345 image_url=cdn.verdnatura.es/.../165920</code></p>
 ```
