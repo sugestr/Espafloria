@@ -1,4 +1,4 @@
-<!-- v: 21.3 | updated: 2026-05-03T10:00Z -->
+<!-- v: 21.4 | updated: 2026-05-03T11:00Z -->
 # Verdnatura Reception — Agent Specification
 
 **Audience:** autonomous reconciliation agent (subagent) обрабатывающий Verdnatura albaranes 2026.
@@ -369,8 +369,17 @@ Label всегда **сильнейшее actual evidence**. Precedence: `suppli
 
 **HIGH = ≥0.84.** Не downgrade learned vendor code или operator hit потому что Odoo card name ugly/legacy.
 
-#### §A2.7 Preserve existing card
-Сохраняем assigned product_id когда identity passes gate AND нет clearly stronger competing candidate. Reject только при hard species conflict OR явно лучший candidate на сильнейшем evidence. **Quantitative threshold:** existing card имеет ≥1 supplierinfo с близкой ценой (±50% от paper.PVP) → keep (consolidate OK).
+#### §A2.7 Preserve existing card — DEFAULT bookkeeper's split (v21.4 strict)
+
+**Default = keep bookkeeper's product_id assignment** даже если paper concepto на нескольких lines выглядит «похоже». Reject default ТОЛЬКО при выполнении ВСЕХ:
+
+1. **Hard species conflict** существует (rose↔tulip, eucalyptus cinerea↔parvifolia — разные species)
+2. ИЛИ **явно лучший candidate** найден на сильнейшем evidence (learned codigo / operator hit)
+3. **Price ratio ≤ 1.5** — `max(line.price_unit, candidate.template.price_avg) / min(...) <= 1.5`. Если ratio > 1.5 — **разные товары**, бухгалтер's split правильный, НЕ reassign.
+
+**Pilot 11 incident (2026-05-03):** subagent reassigned L2 (199106 BONS Ginseng Cerámica 37 cm, 16.75€) от 7126 (FICUS BONSAI - planta/25) к 7083 (FICUS BONSAI GINSENG con maceta cerámica) с ratio 16.75 / 9.61 = **1.74 > 1.5**. Бухгалтер видела разница (37 cm с керамикой vs другой бонсай) — её split был корректный. Subagent agressive consolidation = ошибка. **Не повторять**: ratio >1.5 → preserve.
+
+**§B1a MIX consolidate criteria** уже содержат price ratio ≤ 1.5 — это **тот же gate** для решений consolidate vs preserve.
 
 #### §A2.8 Matching algorithms (после identity gate passed)
 1. **Positional 1:1** — paper line[i] ↔ Odoo line[i], если N=M и порядок не нарушен
