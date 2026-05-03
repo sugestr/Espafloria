@@ -1,4 +1,4 @@
-<!-- v: 21.0 | updated: 2026-05-03T07:00Z -->
+<!-- v: 21.2 | updated: 2026-05-03T09:00Z -->
 # Verdnatura Reception — Agent Specification
 
 **Audience:** autonomous reconciliation agent (subagent) обрабатывающий Verdnatura albaranes 2026.
@@ -663,6 +663,59 @@ def upsert_attribute_line(tmpl, attr_id, raw_value):
 - **A (runtime verify):** ATTR_MAP может ошибиться или Odoo config поменяется — перед apply проверяем `attr.create_variant` actual.
 - **B (multi-value preserve):** Если N paper lines на одном template дают **разные** values одного `no_variant` attribute (GENISTA-MIX: Retama Rojo Nº Tallos≈7, Retama Blanco ≈9) — `append` оба value в `value_ids`, не один поверх другого. `no_variant` хранит multi-value без variant explosion.
 - **C (no overwrite existing):** Если на template уже привязан `UD Venta=Tallo` (legacy), а текущий paper говорит `UD Venta=Paquete` — append Paquete рядом. Bookkeeper потом manually cleanup'нет если нужно. Алгоритм НЕ удаляет историю.
+
+#### §A6.3 ⚠️ Final attribute completeness check (v21.2 NEW)
+
+**После всех writes на template** (Step 8 finished) — per template которые получили supplierinfo upsert на этом pedido, **сделать final pass**:
+
+```python
+for tmpl_id, suppliers in ctx['supplierinfo_by_tmpl'].items():
+    if tmpl_id not in touched_templates: continue  # обрабатывали этот pedido
+
+    # 1. Parse все no_variant attrs из всех supplierinfo.product_name на этом template
+    expected_values_by_attr = defaultdict(set)  # {attr_id: {value_name, ...}}
+    for si in suppliers:
+        if si.partner_id != 42 or not si.product_name: continue
+        # parse «Concepto | COLOR X | ALTURA Y | UD VENTA Z | PESO/TALLO W» style
+        for tag, raw_value in parse_pipe_separated(si.product_name):
+            attr_id = ATTR_MAP.get(normalize(tag))
+            if not attr_id: continue
+            attr_meta = env['product.attribute'].browse(attr_id)
+            if attr_meta.create_variant != 'no_variant': continue  # only no_variant
+            expected_values_by_attr[attr_id].add(normalize(raw_value))
+
+    # 2. Compare vs current attribute_lines
+    for attr_id, expected_values in expected_values_by_attr.items():
+        existing_line = next((al for al in ctx['attribute_lines_by_tmpl'][tmpl_id] 
+                              if al.attribute_id.id == attr_id), None)
+        existing_values = set()
+        if existing_line:
+            for val_id in existing_line.value_ids:
+                existing_values.add(normalize(val_id.name))
+        
+        # 3. Find missing values
+        missing = expected_values - existing_values
+        if not missing: continue  # all covered
+        
+        # 4. Add missing values (create attribute.value if not exists)
+        for value_name in missing:
+            value = find_or_create_attribute_value(attr_id, value_name)
+            if existing_line:
+                update_record('product.template.attribute.line', existing_line.id, 
+                              {'value_ids': [(4, value.id)]})
+            else:
+                create_record('product.template.attribute.line', {
+                    'product_tmpl_id': tmpl_id,
+                    'attribute_id': attr_id,
+                    'value_ids': [(6, 0, [value.id])]
+                })
+```
+
+**Зачем:** subagent во время line processing мог пропустить attribute_line write по любой причине (ошибка, edge case, retry). Final pass **гарантирует** что **все** no_variant atrs из supplierinfo.product_name applied на template. Multi-value preserve.
+
+**Pilot 8 incident (2026-05-03):** TULIPAN-MIX имел 4 supplierinfo с разными Peso/Tallo (34/35/40/30 gr), но attribute_line содержал только 3 values (30 gr missing). Subagent пропустил append на one paper.ref. STATICE имел 0 attribute_lines хотя 2 supplierinfo с Peso/Tallo=30 gr. HEDERA, PANICUM, RANUNCULUS-MIX, CHAMELACIUM, ROSA AQUA, ROSA RAMI sweet gelato Sian, RS ROSA Pink Athena — все missing. **Final pass поймал бы все** автоматически.
+
+**Stop-gap:** этот final pass — defensive, добавляет ~1-2 secs на pedido. Net win стоит.
 
 #### §A6.2 Safety check — unarchive default variant after attribute_line write (v20.2)
 
