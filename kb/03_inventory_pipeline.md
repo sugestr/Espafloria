@@ -1,4 +1,4 @@
-<!-- v: 4 | updated: 2026-05-03T17:30Z -->
+<!-- v: 5 | updated: 2026-05-03T18:00Z -->
 # 03. Inventory pipeline — приёмка и bill control
 
 **Что в файле:** техдок приёмки (`stock.picking` / `stock.move` слой, review-status, calculate_in_shop, sentinel -1) + bill control policy (`purchase` vs `receive`) + backorder logic. **Reconciliation слой** (бот + `purchase.order.line`) — отдельно в [02_makecom_bot.md](02_makecom_bot.md).
@@ -138,35 +138,53 @@ for picking in records:
 
 ## 6. Bill control policy
 
-**Принято 2026-04-18.** Разделение по типам товара.
+**Финальная политика 2026-05-03:** разделение по типу товара (живой vs твёрдый), независимо от vendor.
 
-### 6.1. Цветы / горшечка → `purchase` (On ordered quantities)
+### 6.1. Цветы (живой товар) → `purchase` (On ordered quantities)
 
-| Категория | id |
-|---|---|
-| `FLORES CORTADAS` | 212 |
-| `PLANTAS EN MACETAS` | 213 |
+| Категория | id | Назначение |
+|---|---|---|
+| `FLORES CORTADAS` | 212 | Срезанные цветы любого vendor (Verdnatura, Mercabarna, прочие) |
 
 **Что значит:**
 - Vendor bill ждёт `product_qty` (paper), не `qty_received`.
-- Платим по бумаге поставщика, независимо от расхождений приёмки.
+- Платим по бумаге поставщика, независимо от мелких расхождений приёмки.
 
 **Причины:**
-- Цветы — живой товар, расхождения «49 из 50» — норма.
+- Цветы — живой товар, расхождения «49 из 50» — естественная норма (потери в дороге, лёгкое увядание, погрешность пересчёта).
 - Поставщику платят по его factura, бизнес не спорит за мелочи.
-- Receipt важен для склада, но не должен диктовать сумму bill.
+- Если расхождение **большое** — ругаемся отдельным процессом, но это редкость.
+- Receipt важен для склада (точный stock в Tallo), но не должен диктовать сумму bill.
 
-**Сделано 2026-04-18:** ~900 карточек FLORES CORTADAS + PLANTAS EN MACETAS → `purchase`.
+### 6.2. Твёрдый товар + горшечка → `receive` (On received quantities)
 
-### 6.2. Остальное → `receive` (On received quantities)
+| Категория (родительская) | id | Что включает |
+|---|---|---|
+| `PLANTAS EN MACETAS` | 213 + детские 270-278 | Растения в горшках (BONSAI, MONSTERA, SUCCULENTUS, PHALAENOPSIS, др.) — 350 карточек |
+| `DECORACION Y ADORNOS` | 209 + детские | Вазы, упаковка, декор, MACETAS DE CERÁMICA/MADERA/... |
+| `EQUIPAMIENTO` | 293 | Тех-оборудование (создана 2026-05-03) |
+| `EMBALAJE`, `ENTREGA`, `PRODUCTOS ESPECIALES`, `Consumibles` | прочие | Расходники, доставка, спец-позиции |
 
-DECORACION, EMBALAJE, ENTREGA, PRODUCTOS ESPECIALES, Consumibles → `receive`. ~1085 карточек.
+**Что значит:**
+- Vendor bill ждёт `qty_received` (фактическое поштучное), не `product_qty`.
+- Если vendor прислал 4 шт вместо 5 — bill за 4 (или по нашей счётной нагрузке требуем правильную factura от vendor).
+
+**Причины:**
+- Твёрдый товар — поштучный, физический пересчёт обязателен.
+- Защита от vendor под-поставок: «прислали меньше → не платим за non-delivered».
+- Add-on от vendor (горшок, упаковка, бонсай) — не «живой» в смысле естественной убыли — каждый экземпляр считается.
+
+**Migration trail:**
+- 2026-04-18 первая миграция: ~900 цветов и горшечек на `purchase` (по тогдашней предполагаемой политике «всё что от Verdnatura — paper»).
+- 2026-05-03 уточнение: горшечка обратно на `receive` (твёрдый товар = поштучно). Фактическое состояние БД: 349 из 350 PLANTAS EN MACETAS уже были на `receive` (миграция 2026-04-18 затронула только parent category 213 без детских), 1 outlier (Monstera 7850) переключен.
 
 ### 6.3. Проверка в Odoo
 
 ```
 Покупки → Товары → фильтр: Method = "On ordered quantities"
 ```
+
+Должны показаться **только** FLORES CORTADAS (212). Если в фильтре всплывёт что-то из горшечки или твёрдого — это outlier, переключить на `receive`.
 
 ---
 
