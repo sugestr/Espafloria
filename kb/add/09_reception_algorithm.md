@@ -1,9 +1,5 @@
-<!-- v: 20.3 | updated: 2026-05-03T05:00Z -->
+<!-- v: 21.0 | updated: 2026-05-03T07:00Z -->
 # Verdnatura Reception — Agent Specification
-
-**v20.3 changelog (vs v20.2):** правки после pilot 4 (12178233 pack) incident от 2026-05-03 — subagent потерял bookkeeper recount при pack-conversion (5 pack lines с expected_qty=0 → BLOCKER C ⛔). (1) §B3.0 (NEW) — **preserve bookkeeper recount ПЕРЕД pack-conversion** — old `product_qty` (stems count) → `x_studio_expected_qty` если empty. (2) §A6.1.bis (NEW) — `no_variant` атрибуты ВСЕГДА apply (даже на MIX/multi-species) — для pack metadata training (UD Venta, Nº Tallos, Peso). MIX-skip правило применяется только к `dynamic`. + 3 caveats (runtime verify, multi-value preserve, no overwrite existing).
-
-**v20.2 changelog (vs v20.1):** правки на основе pilot 1/2/3 (12254925 / 12241558 / 12211205) от 2026-05-03. (1) §A4 +categ 293 EQUIPAMIENTO + decision matrix categ_id. (2) §A5 — Odoo 19 fields (`type='consu', is_storable=True`), `uom_po_id` только на supplierinfo, `sale_ok=False` обязательно, `list_price ≠ 0`. (3) §A6 — skip dynamic attrs на MIX-templates + safety check unarchive default variant. (4) §A3.3 image_1920 fetch на existing если пусто. (5) §A3.6 (NEW) supplierinfo on color/size variants — pin `product_id`. (6) §B2 yellow path explicit `x_studio_review_color=3`. (7) §A2.3 OZOTHAMNUS=Flor de Arroz example. (8) §3 Step 2 multi-albarán PDF support.
 
 **Audience:** autonomous reconciliation agent (subagent) обрабатывающий Verdnatura albaranes 2026.
 
@@ -124,14 +120,118 @@ Supervisor может **починить paper PDF** (extract pages, replace att
 - **Match** → продолжаем нормально.
 - **Mismatch** → **НЕ блокер разбора**. Создаём activity «🟠 адрес бумаги X, pedido висит на Y — какой склад правильный?». Финализацию **дожидаемся owner** (через pass2).
 
-### Step 4 — Pull Odoo lines
+### Step 4 — Bulk preload pattern (v21.0 REWORK)
+
+**Цель:** на старте pedido загрузить в memory **всё** что понадобится для решений per line — чтобы decisions phase делалась **БЕЗ дополнительных MCP search calls**. Уменьшает API calls с ~50-95 до ~25 per pedido.
+
+**4.1 Read all PO lines** (1 call):
 ```python
-mcp__odoo__search_records('purchase.order.line',
-  domain=[['order_id','=',pedido_id]], order='id asc')
+lines = mcp__odoo__search_records('purchase.order.line',
+    domain=[['order_id','=',pedido_id]],
+    fields=['id','product_id','product_qty','price_unit','name','uom_id','tax_ids',
+            'x_studio_supplier_sku','x_studio_expected_qty',
+            'x_studio_supplier_product_name','x_studio_item_comment',
+            'x_studio_operator_hit'],
+    order='id asc')
 ```
 
-### Step 5 — Identity match per Odoo line (§A2)
-Для каждой Odoo line найти соответствующую paper line. Strict identity gate + flexibility — см. §A2.
+**4.2 Extract unique template/product IDs** (in memory):
+```python
+product_ids = list(set(l['product_id'][0] for l in lines))
+# product_id → product_tmpl_id mapping needed (variant→template)
+products = mcp__odoo__search_records('product.product',
+    domain=[['id','in',product_ids]],
+    fields=['id','product_tmpl_id','default_code','product_template_attribute_value_ids'])
+template_ids = list(set(p['product_tmpl_id'][0] for p in products))
+```
+
+**4.3 Bulk read templates** (1 call):
+```python
+templates = mcp__odoo__search_records('product.template',
+    domain=[['id','in',template_ids]],
+    fields=['id','name','default_code','barcode','categ_id','sale_ok',
+            'list_price','standard_price','uom_id','type','is_storable',
+            'description_purchase','x_studio_codigo_fabrica','active',
+            'product_variant_count','attribute_line_ids'])
+# image_1920 НЕ грузим — просто заметить empty/non-empty через отдельный thin search:
+templates_with_image = mcp__odoo__search_records('product.template',
+    domain=[['id','in',template_ids],['image_1920','!=',False]],
+    fields=['id'])
+templates_without_image_set = set(template_ids) - {t['id'] for t in templates_with_image}
+```
+
+**4.4 Bulk read attribute_lines на preloaded templates** (1 call):
+```python
+attribute_lines = mcp__odoo__search_records('product.template.attribute.line',
+    domain=[['product_tmpl_id','in',template_ids]],
+    fields=['id','product_tmpl_id','attribute_id','value_ids'])
+```
+
+**4.5 Bulk read supplierinfo Verdnatura для preloaded templates** (1 call):
+```python
+supplierinfo = mcp__odoo__search_records('product.supplierinfo',
+    domain=[['partner_id','=',42],['product_tmpl_id','in',template_ids]],
+    fields=['id','product_tmpl_id','product_id','product_code','price','uom_id',
+            'min_qty','date_start','product_name'])
+```
+
+**4.6 Lazy load attribute_values — только для used attributes этого pedido** (1 call):
+
+Перед этим вызовом — **parse paper PDF** (Step 2 уже сделан) и **extract** какие attribute tags реально встречаются в paper sub-lines. ATTR_MAP в §A6 дает 17 attribute_ids общего списка, но на одном pedido обычно используется **5-7** (Color, Altura, UD Venta, Nº Tallos, Peso — типичный набор).
+
+```python
+# Из паршеных paper.lines extract used tags
+used_attr_ids = set()
+for paper_line in paper.lines:
+    for tag in paper_line.attributes:  # already parsed sub-line
+        attr_id = ATTR_MAP.get(normalize(tag))
+        if attr_id:
+            used_attr_ids.add(attr_id)
+
+# Load values ТОЛЬКО для used (обычно 5-7 attribute_ids, не 17)
+attribute_values = mcp__odoo__search_records('product.attribute.value',
+    domain=[['attribute_id','in', list(used_attr_ids)]],
+    fields=['id','name','attribute_id'])
+# Index: {(attr_id, name_normalized): value_id} for fast lookup
+```
+
+**Speedup:** ~3× faster чем preload всех 17 (load ~30-50 values вместо ~150-300).
+
+**Total Step 4: 5-6 search calls для **полной** preloaded картины этого pedido.**
+
+**Step 5+ (decisions) делается через memory dict lookups, не MCP**:
+- Identity match — lookup `templates[tmpl_id]['name']` / `codigo_fabrica` / `default_code`
+- Codigo learn — lookup `supplierinfo` filtered by `product_tmpl_id`
+- Attribute upsert — lookup `attribute_lines` для template + `attribute_values` для re-use
+- §B1c search before create — `templates` dict содержит все candidate cards уже
+
+Если **fuzzy semantic search across all catalog** нужен (новая card, нет identity на preloaded templates) — fallback к single MCP search. Это редкий path (~5% lines).
+
+**§3.A Memory data structures (v21.0):**
+
+```python
+ctx = {
+    'pedido_id': int,
+    'lines_by_id': {line_id: line_dict},
+    'lines_ordered': [line_dict, ...],  # by id asc
+    'templates_by_id': {tmpl_id: tmpl_dict},
+    'products_by_id': {product_id: product_dict},  # variant → template lookup
+    'attribute_lines_by_tmpl': {tmpl_id: [attr_line_dict, ...]},
+    'supplierinfo_by_tmpl': {tmpl_id: [supplierinfo_dict, ...]},
+    'attribute_values_by_attr': {(attr_id, name): value_id},
+    'templates_without_image': set(),
+    'paper': {'docNum', 'lines': [...], 'subtotal', 'iva_breakdown', 'total', 'address', 'fecha'},
+}
+# All Step 5-9 decisions read/write `ctx` (in memory).
+# Step 10 (writes) накапливает changes в `ctx['pending_writes']`, затем flushes.
+```
+
+### Step 5 — Identity match per Odoo line (§A2) — **memory-based (v21)**
+Для каждой Odoo line найти соответствующую paper line. **Все evidence lookups через preloaded `ctx` dicts** (templates_by_id / supplierinfo_by_tmpl / attribute_lines_by_tmpl / products_by_id). НЕ делать дополнительные MCP search calls на каждой строке.
+
+Strict identity gate + flexibility — см. §A2.
+
+**Fuzzy fallback (rare ~5%):** если paper line не находит identity на preloaded templates (новая card, нет в этом pedido) → **тогда** разрешён 1 MCP search для broader catalog fuzzy match. Если и так не найден → BLOCKER C 🔴 (или create new per §B1A).
 
 ### Step 6 — Per-line decisions (§B)
 Для каждой строки **6 решений:**
@@ -383,6 +483,21 @@ Card type (placeholder/quarantine/normal) **не критерий**. Не тер
 - **Field rename**: `'type': 'product'` устарело → используй `type='consu', is_storable=True`. Подтверждено образцом existing card 8212 в каталоге.
 - **`uom_po_id` нет на template**: ставь uom только через `uom_id`. Для per-supplier uom — на `product.supplierinfo.uom_id`.
 - **`product_template_id` нет на purchase.order.line**: используй `product_id.product_tmpl_id` для template lookup из line.
+
+#### §A5.2 UoM field naming в Odoo 19 — захардкожено (НЕ verify-grep'ом)
+
+Поле UoM на каждой модели — **факт** (не runtime variable). НЕ делать grep на spec / search в Odoo чтобы verify:
+
+| Model | Field name | Использование |
+|---|---|---|
+| `product.template` | `uom_id` | базовая единица |
+| `product.product` (variant) | inherits from template — отдельного поля нет |
+| `product.supplierinfo` | `uom_id` | per-supplier uom (может отличаться от template) |
+| `purchase.order.line` | `uom_id` | UoM на line (для price interpretation) |
+| `stock.move` | **`uom_id`** в Odoo 19 (было `product_uom` в Odoo 17/18 — переименовано) |
+| `stock.move.line` | `product_uom_id` | да, тут другое имя — но subagent редко trogает stock.move.line |
+
+UoM IDs (constants, см. §2): **1 = Tallo/Units, 31 = Paquete (Усреднённый)**.
 
 ### §A6 Native Odoo product.attribute mapping
 
