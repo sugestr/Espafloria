@@ -1,4 +1,4 @@
-<!-- v: 21.7 | updated: 2026-05-03T14:30Z -->
+<!-- v: 21.8 | updated: 2026-05-03T16:00Z -->
 # Verdnatura Reception — Agent Specification
 
 **Audience:** autonomous reconciliation agent (subagent) обрабатывающий Verdnatura albaranes 2026.
@@ -433,6 +433,86 @@ if len(prices) >= 2:
 **Pilot 11 incident retro (2026-05-03 после re-evaluation):** card 7126 (FICUS BONSAI - planta/25) держал refs 165850 (9.26€) и 199106 (16.75€). Pairwise: avg 13.0€ (expensive band), ratio 1.81 > 1.4, abs 7.49 > 5.0 — **fail gate**. Должна быть activity для review. После owner verify: 199106 reassigned на 7083 (FICUS BONSAI GINSENG con maceta cerámica) — корректное место. Это **именно тот тип ошибки** который scaled gate должен ловить.
 
 **§B1a MIX consolidate criteria** наследуют тот же scaled gate — алгоритм consolidate vs preserve unified.
+
+#### §A2.7.3 Stem-line qty gate via margin cross-check (v21.8 NEW — catch bookkeeper import bugs)
+
+**Проблема (bulk batch 1, pedido 12186266):** ref 57603 CL Solomio Edo SEL — paper 40 stems, бухгалтер записал в Holded `1` штуку (broken import — Holded иногда выгружает default `1` вместо реального qty при сбое API). Бот доверчиво поставил expected_qty=1, на склад ушёл 1 stem вместо 40, активность создана но color только 🟡 yellow silent.
+
+**Принцип решения:** для STEM lines (uom=Tallo), bookkeeper recount **не верим** если он даёт **absurd margin** относительно paper. Margin × как cross-check на qty integrity.
+
+```python
+def stem_qty_gate(line, paper_cant, expected_qty, list_price, price_unit):
+    """v21.8 — catch bookkeeper qty import bugs via margin cross-check.
+    
+    Применяется ТОЛЬКО к stem lines (uom=Tallo, не pack).
+    Применяется ТОЛЬКО когда expected_qty != paper_cant (есть divergence).
+    """
+    # Skip if no significant divergence or tiny line
+    if expected_qty == paper_cant or paper_cant < 5:
+        return ('keep', None)
+    
+    # Compute margin both ways
+    if not list_price or not price_unit:
+        return ('keep', None)  # nothing to cross-check against
+    
+    # Margin if we trust paper as physical truth (price_unit per stem, 1:1)
+    margin_via_paper = list_price / price_unit
+    
+    # Margin if we trust bookkeeper recount (cost spread over fewer/more stems)
+    cost_per_stem_recount = (price_unit * paper_cant) / expected_qty if expected_qty else float('inf')
+    margin_via_recount = list_price / cost_per_stem_recount if cost_per_stem_recount else 0
+    
+    # Decision matrix:
+    # - margin_via_recount < 1.0 (loss territory) AND margin_via_paper >= 1.0 (sane)
+    #   → bookkeeper data broken, override expected_qty = paper.cant + orange + activity
+    # - both sane (>= 1.0) → keep recount as physical (legit small loss/damage scenario)
+    # - both loss → both broken? rare, kepp as-is + red blocker
+    
+    if margin_via_recount < 1.0 and margin_via_paper >= 1.0:
+        return ('override_to_paper', f'Bookkeeper recount={expected_qty} → margin ×{margin_via_recount:.2f} (loss). Paper={paper_cant} → margin ×{margin_via_paper:.2f} (sane). Override.')
+    
+    if margin_via_recount < 1.0 and margin_via_paper < 1.0:
+        return ('blocker_c', f'Both margins loss-territory. Identity или price может быть кривое. Owner-resolve.')
+    
+    if margin_via_recount >= 10.0:
+        return ('high_soft_flag', f'Margin ×{margin_via_recount:.1f} необычно высоко. Возможно устарел list_price на карточке, или вендорский бонус (recount > paper). Не override, но проверь.')
+    
+    return ('keep', None)
+```
+
+**Action на `override_to_paper`:**
+- `x_studio_expected_qty = paper.cant`
+- `product_qty = paper.cant` (already paper-truth)
+- Phase A2 picking → `quantity = paper.cant` (full paper qty)
+- color = 🟠 orange (substantial autofix)
+- activity на pedido: «Строка X: detected import bug (paper N stems, Holded recount K). Override на N. Физически проверь сколько реально пришло.»
+
+**Action на `blocker_c`:** красный + activity + НЕ trigger 1217.
+
+**Action на `high_soft_flag` (v21.8):**
+- `expected_qty` НЕ override — recount скорее всего верный, проблема в list_price freshness или это legit бонус.
+- color = 🟠 orange (требует ревью).
+- activity на pedido: «Строка X: margin ×{m:.1f} необычно высоко. Проверь list_price на карточке (может устарел) ИЛИ это вендорский бонус (recount > paper — норма). Сделай решение.»
+
+**Когда НЕ срабатывает (legit cases):**
+- Pack lines (uom=Paquete): не applies, для pack divergence — это ожидаемое поведение (paper packs ≠ recount stems).
+- Stem с малым delta (paper 40, recount 39): не trigger т.к. margin via recount ~×1.83, sane — нормальная фактическая проверка.
+- Stem с большим delta но обоими margin sane (1.5–10): keep (например paper 40, recount 30 — physical loss 10 шт, margin via recount всё ещё ×1.55 = норма).
+
+**Mnemonic для owner ревью (живой контроль через Margin × колонку в Studio):**
+
+Studio decoration на `Margin ×` синхронизирован со spec gate:
+
+| Margin × | Visual | Семантика | Бот действие |
+|---|---|---|---|
+| < 1.5 | 🔴 red | убыток / cost ≥ price | gate `override_to_paper` (если loss) или `blocker_c` (если оба broken) — auto-override + activity |
+| 1.5 — 2.5 | 🟡 yellow | тонко, ниже target | normal flow, без флага |
+| 2.5 — 10 | 🟢 green | норма (target ×3) | normal flow |
+| ≥ 10 | 🔵 blue | подозрительно высоко | gate `high_soft_flag` — activity, без override |
+
+**Принцип:** **оба** края (×<1.5 и ×≥10) подозрительны для бота, оба триггерят activity на pedido. Разница в действии: low → override qty, high → не трогаем qty, флагуем list_price.
+
+**Pilot retro:** этот gate retroactively применён к ref 57603 на pedido 47812 — `expected_qty 1→40`, +39 stems в BLA/Stock, color 🟡→🟠, activity создана. См. chatter 19111.
 
 #### §A2.8 Matching algorithms (после identity gate passed)
 1. **Positional 1:1** — paper line[i] ↔ Odoo line[i], если N=M и порядок не нарушен
