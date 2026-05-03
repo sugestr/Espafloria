@@ -1,4 +1,4 @@
-<!-- v: 21.2 | updated: 2026-05-03T09:00Z -->
+<!-- v: 21.3 | updated: 2026-05-03T10:00Z -->
 # Verdnatura Reception — Agent Specification
 
 **Audience:** autonomous reconciliation agent (subagent) обрабатывающий Verdnatura albaranes 2026.
@@ -206,6 +206,24 @@ attribute_values = mcp__odoo__search_records('product.attribute.value',
 - §B1c search before create — `templates` dict содержит все candidate cards уже
 
 Если **fuzzy semantic search across all catalog** нужен (новая card, нет identity на preloaded templates) — fallback к single MCP search. Это редкий path (~5% lines).
+
+**⚠️ ANTI-PATTERN (v21.3): mid-process MCP re-reads запрещены**
+
+После любого write (line / template / supplierinfo / attribute_line) **НЕ** делай дополнительный MCP read для confirm result. **Trust write success** — MCP вернул `success:True` достаточно. Update local `ctx` dict с новыми value (чтобы downstream Step 5+ видели свежий state из memory).
+
+**Запрещено:**
+- Per-line `get_record` после `update_record` line
+- Per-template `get_record` после `attribute_line.create`
+- Per-supplierinfo verify после `create`
+- Re-read templates после batch update
+
+**Разрешено (один раз каждое):**
+- Step 4 initial bulk preload (~5 calls)
+- Step 9 batch §A6.2 variant_count verify (1 call, batch all touched templates)
+- Step 10 после trigger 1217 — final verify pedido state + picking + stock.moves (3 calls)
+- Step 11 ничего read не нужно (write summary + activity)
+
+**Pilot 11 incident (2026-05-03):** subagent делал per-template variant_count read = 5 extra calls. Total ~36 vs target 25-30. Net +5 calls бесплатно потеряно. Spec теперь explicit: batch verify = 1 call.
 
 **§3.A Memory data structures (v21.0):**
 
@@ -717,24 +735,37 @@ for tmpl_id, suppliers in ctx['supplierinfo_by_tmpl'].items():
 
 **Stop-gap:** этот final pass — defensive, добавляет ~1-2 secs на pedido. Net win стоит.
 
-#### §A6.2 Safety check — unarchive default variant after attribute_line write (v20.2)
+#### §A6.2 Safety check — unarchive default variant (BATCHED v21.3)
 
-После любого `product.template.attribute.line.create` или `value_ids` update (для **не-MIX** templates):
+После **всех** attribute_line writes Step 8 done — **один batch verify** для всех touched templates:
 
 ```python
-# verify variant integrity
-template = env['product.template'].browse(tmpl_id)
-if template.product_variant_count == 0:
-    # default variant archived by Odoo cascade — restore
-    archived_default = env['product.product'].search(
-        [('product_tmpl_id','=',tmpl_id),('active','=',False),('product_template_attribute_value_ids','=',False)],
-        limit=1
-    )
-    if archived_default:
-        archived_default.write({'active': True})  # safety net
+# Один read для всех templates сразу (НЕ per-template loop)
+touched_tmpl_ids = [...]  # из ctx, accumulated в Step 8
+verify = mcp__odoo__search_records('product.template',
+    domain=[['id','in', touched_tmpl_ids]],
+    fields=['id','product_variant_count'])
+
+zero_variant_tmpls = [t['id'] for t in verify if t['product_variant_count'] == 0]
+if not zero_variant_tmpls:
+    pass  # all OK
+else:
+    # Один search для archived default variants на проблемных templates
+    archived = mcp__odoo__search_records('product.product',
+        domain=[['product_tmpl_id','in', zero_variant_tmpls],
+                ['active','=',False],
+                ['product_template_attribute_value_ids','=',False]],
+        fields=['id'])
+    # Bulk unarchive
+    for variant in archived:
+        update_record('product.product', variant.id, {'active': True})
 ```
 
+**Total: 1-2 reads + N writes (только если есть archived). НЕ N per-template reads.**
+
 Сценарий: Odoo при добавлении dynamic attribute_line на template archive'ит default variant если новые variants ещё не созданы. Pilot 2 поймал это incident'ом, retro-fix потребовался.
+
+**v21.3 правка:** **Не делай per-template MCP reads** для variant_count check — используй один batch search. Pilot 11 (12536221) делал per-template = 5 calls лишних.
 
 ---
 
