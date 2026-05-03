@@ -341,7 +341,32 @@ Margin × badge на `x_studio_margin_x_display` использует порог
 
 Любой случай = «знаем правду, но в `move.quantity` остался старый value». Полезный инвариант для аудита.
 
-#### 10.2.5 Что НЕ затронуто (структурно точно)
+#### 10.2.5 Dedicated «Purchase Analysis (поштучно)» action (v5 NEW)
+
+**Меню:** Purchase → Reporting → **Purchase Analysis (поштучно)** (action 1229) — создан рядом с native «Purchase Analysis (пачки)» (action 767, переименован для отличия).
+
+**Источник:** `purchase.order.line` напрямую, не purchase.report SQL aggregator. Это даёт доступ к нашим custom полям без агрегационных артефактов.
+
+**Dedicated views:**
+- pivot 4667
+- graph 4670
+- list 4669
+
+**Measures (только агрегируемые stored поля):**
+- Реальные штуки (`x_studio_expected_qty`) — sum
+- Subtotal (€) (`price_subtotal`) — sum
+- Tax / Total / Discount — sum
+- Gross Weight (kg), Volume (m³) — related из product.template
+- Days to Confirm, Days to Receive — computed integer (date arithmetic)
+
+**Average Cost** — пользоваться `Subtotal / Реальные штуки` мысленно. Это **корректный weighted avg**: sum_subtotal / sum_real_stems = €/stem (то что нам нужно). Native `Average Cost` в (пачках) считает avg of avgs со static factor — distorted.
+
+**Что НЕ работает как pivot measure:**
+- `x_studio_qty_received_stems` (sum done moves), `x_studio_unit_price_per_stem`, `x_studio_margin_x_1` — computed non-stored, без `aggregator` атрибута. Пытался создать stored — Odoo Online API не принимает `aggregator`/`group_operator` (Python-level only). Эти поля видны только в **list view** через `sum="Sum"`.
+
+**Distorted measures скрыты в pivot/graph через `invisible="1"`** — но Odoo всё равно автоматически добавляет ВСЕ numeric fields в Measures dropdown. Это структурное ограничение pivot: declared list только для default-selection, не для exclusion.
+
+#### 10.2.6 Что НЕ затронуто (структурно точно)
 
 После того как товар прошёл receipt:
 - `stock.quant` (текущий остаток) в Tallo ✅

@@ -1,4 +1,4 @@
-<!-- v: 21.9 | updated: 2026-05-03T19:30Z -->
+<!-- v: 21.10 | updated: 2026-05-03T20:30Z -->
 # Verdnatura Reception — Agent Specification
 
 **Audience:** autonomous reconciliation agent (subagent) обрабатывающий Verdnatura albaranes 2026.
@@ -675,7 +675,7 @@ else:
 | `is_storable` | `True` (Odoo 19 для tracking inventory) |
 | **`sale_ok`** | **`False`** (v20.2 — карантин не продаётся в живом POS до promotion в clean) |
 | `purchase_ok` | `True` |
-| `list_price` | **`round(paper.PVP * 3 / 1.21, 2)`** (×3 markup ex IVA — стандартная розничная наценка Espafloria, IVA снимается т.к. tax mode = `tax_excluded` → list_price хранится ex IVA, customer-facing цена = list_price × 1.21). При нестандартных категориях (EQUIPAMIENTO, PUBLICIDAD) markup ставится 0 — owner-resolve через activity. |
+| `list_price` | **`round(paper.PVP * 3 / 1.21, 2)`** (×3 markup ex IVA — стандартная розничная наценка Espafloria, IVA снимается т.к. tax mode = `tax_excluded` → list_price хранится ex IVA, customer-facing цена = list_price × 1.21). **Всегда ставим ×3 baseline для любой категории** (включая EQUIPAMIENTO, PUBLICIDAD) — owner делает review цен после, но 0 не оставляем (v21.10, 2026-05-03 owner directive). |
 | `standard_price` | paper.PVP (опционально — Odoo сам подхватит из supplierinfo при первом receive) |
 | `uom_id` | 1 (Tallo) или 31 (Paquete) по UD VENTA. **Поле `uom_po_id` НЕ существует на product.template в Odoo 19** — оно только на `product.supplierinfo`. |
 | `purchase_method` | `'receive'` |
