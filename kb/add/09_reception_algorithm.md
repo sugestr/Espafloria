@@ -372,7 +372,29 @@ Label всегда **сильнейшее actual evidence**. Precedence: `suppli
 Card type (placeholder/quarantine/normal) **не критерий**. Не теряем data на любую decisively-обработанную строку.
 
 #### §A3.2 Supplierinfo upsert (create OR update existing empty)
-**До create — search:** `product.supplierinfo([['partner_id','=',42],['product_tmpl_id','=',tmpl_id],['product_code','in',[False, '']]])`. Если найдена пустая default — **обновляем её** вместо дубликата. Иначе — create new.
+
+**Idempotent rule (v21.1):** для каждого `paper.ref` на pedido — supplierinfo на template должна существовать с `product_code = paper.ref`. Перед create:
+
+```python
+existing = ctx['supplierinfo_by_tmpl'][tmpl_id]
+already = next((si for si in existing if si.product_code == paper.ref), None)
+if already:
+    # уже создана — update price если изменилась, иначе skip
+    if already.price != paper.PVP:
+        update_record('product.supplierinfo', already.id, {'price': paper.PVP})
+    continue  # NEXT REF, не create дубликат
+
+# Search empty default (одно из существующих без code)
+empty_default = next((si for si in existing if not si.product_code), None)
+if empty_default:
+    # обновляем empty default с current ref/price/name
+    update_record('product.supplierinfo', empty_default.id, vals)
+else:
+    # create new с full vals
+    create_record('product.supplierinfo', vals)
+```
+
+**Sanity check (v21.1):** после create verify `record.product_code != False` AND `record.price != False`. Если any field empty — **delete record + retry create** с правильными vals. **Никогда не оставлять supplierinfo без `product_code`** (это «dummy» — мусор каталога, см. pilot 8 incident 2026-05-03).
 
 | Field | Value |
 |---|---|
@@ -770,11 +792,47 @@ else:  # stem
 | **Pack-conversion alone** — бухгалтер импорт сделал в stems, бот переводит в paq + UoM=31 + expected_qty=stems, без Δ qty | **silent green + 📦 — НЕ orange** | ✅ green + 📦 |
 | Pack with Δ > tolerance на pack qty | paper-truth override + activity | 🟠 orange + 📦 |
 
-### §B3 Pack treatment (когда `is_pack=True`)
+### §B3 Pack treatment + universal recount preservation
 
 Pack count и stem count = два независимых числа. **НЕ** используем `uom.factor` для конвертации (плавающее число штук в пачке).
 
-#### §B3.0 КРИТИЧНО (v20.3 после pilot 4 incident): preserve bookkeeper recount ПЕРЕД pack-conversion
+#### §B3.0 ⚠️ UNIVERSAL RULE — preserve bookkeeper recount (v21.1, generalized из pack-only v20.3)
+
+**Правило для ВСЕХ lines (pack OR stem):** bookkeeper в Holded ввёл `product_qty` = physical stems он принял на склад (recount). Это **священная информация** — её нужно **сохранить в `x_studio_expected_qty`** перед любой modification, **даже если** pack-conversion не происходит.
+
+```python
+# Для КАЖДОЙ line на pedido (stem ИЛИ pack):
+old_qty = line.product_qty  # bookkeeper's physical stems count
+
+# 1. Сохрани bookkeeper recount в expected_qty (если ещё не сохранён)
+if not line.x_studio_expected_qty or line.x_studio_expected_qty == 0:
+    line.write({'x_studio_expected_qty': old_qty})
+
+# 2. Только потом write paper-truth
+if is_pack:
+    line.write({
+        'product_qty': paper.cant,    # paper paquetes
+        'uom_id': 31,                  # Paquete
+        'price_unit': paper.PVP,
+    })
+else:
+    line.write({
+        'product_qty': paper.cant,    # paper stems
+        'price_unit': paper.PVP,      # paper price
+        # uom остается =1 (Tallo/Units)
+    })
+```
+
+**Логика:**
+- Если `old_qty == paper.cant` (типичный stem case без recount разницы) → `expected_qty == product_qty`, **no harm, no info loss**.
+- Если `old_qty != paper.cant` (bookkeeper recounted differently — pack stems vs paquetes ratio, или stem variance) → `expected_qty` хранит recount бухгалтера, `product_qty` хранит paper-truth.
+- При finalize action 1217 Phase A2 пишет `stock.move.quantity = expected_qty` (физически на склад).
+
+**Никогда не оставлять `expected_qty = 0` на line с non-zero `product_qty`** — это **потеря информации пересчёта бухгалтера**.
+
+**Pilot 4 incident (2026-05-03)** + **Pilot 9 повтор (2026-05-03)** — subagent оставил expected_qty=0 на multiple stem lines, потеряв bookkeeper recount. Owner: «нельзя терять информацию пересчёта — qty это с бумаги, expected_qty это от бухгалтера, ВСЕГДА переноси». Этого не должно быть.
+
+#### §B3.1 Pack-specific детали (когда `is_pack=True` AND uom_id=1 → 31)
 
 Когда detect `is_pack=True` AND текущий line **uom_id=1 (Tallo)** AND `product_qty > paper.cant` (бухгалтер ввёл stems вместо paquetes — типичная ситуация Holded import):
 
@@ -954,6 +1012,8 @@ AGGREGATE из working context (см. Step 11). НЕ re-analyze paper-vs-Odoo.
 
 **📦 emoji prefix mandatory для pack lines** (любого статуса). Owner должен сразу видеть в pedido list что строка пакетная.
 
+**⚠️ STRICT TEMPLATES (v21.1):** используй точные strings ниже как Слой 1. **НЕ** изобретай альтернативный стиль типа «🤖 ASTER на MIX-карте» или «🤖 Robot edit» — owner видит pilot 8 эти отклонения как style violation. Одинаковый формат на 100% lines bulk → быстрый scan owner'а в pedido list.
+
 ```
 Слой 1: ОБЗОР simple language. Один из:
   - "✅ Paper match: <concepto> <qty>×<price>€"  (stem clean)
@@ -1060,8 +1120,16 @@ else (color == 0): fallback по qty delta vs MINOR_THRESHOLD
 **Wait (не trogai)** если:
 - `x_studio_claude_finalize=True` уже стоит (action 1217 в работе)
 
-**Skip line** если:
+**Skip line write (only line-level)** если:
 - `item_comment` содержит `✅ Verified by Claude AI`
+- ИЛИ `x_studio_supplier_sku` уже непустой AND identity на этой line неизменна
+
+**⚠️ КРИТИЧНО — НЕ skip template-side actions** даже если все lines на этом template уже processed:
+- supplierinfo upsert per `paper.ref` — **всегда** проверяй и create если нет (идемпотентно по `product_code`)
+- attribute_lines (no_variant per §A6.1.bis) — **всегда** проверяй и apply
+- description_purchase / codigo_fabrica enrichment — **всегда** проверяй и append если нет
+
+**Restart bug pilot 8 (2026-05-03):** subagent при restart skipped template-side training потому что обнаружил `supplier_sku` на lines (думал «уже processed»). Result: CLEMATIS template оставлен с 1 supplierinfo (208) вместо 3 (208 + 87571 + 45580); LISIANTHUS-MIX без `Nº Flores=5` attribute_line; ASTER-MIX dummy supplierinfo без `product_code`. Carta была **частично** обучена. **Никогда не skip template-side enrichment** — он идемпотентный и обязательный per paper.ref.
 
 ### §E2 Re-run на draft / RETRY pedido
 Продолжаем с места где остановился. Применяем новые правила если algorithm refined после прошлого pass. На pass2 (см. §H) — применяем owner_resolution_text.
