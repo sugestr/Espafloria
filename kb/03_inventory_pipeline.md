@@ -387,7 +387,26 @@ Margin × badge на `x_studio_margin_x_display` использует порог
 
 **Average Cost weighted:** в pivot — `Subtotal_sum / Реальные_штуки_sum` (мысленное деление двух measures). Корректнее чем native «Average Cost» которая avg-of-avgs.
 
-**Distorted measures в pivot dropdown:** Odoo автоматически включает ВСЕ numeric fields модели как measures. `invisible="1"` в declared list view не подавляет — это структурное ограничение pivot. Live с этим — owner просто игнорирует distorted measures (Quantity, Received Qty, Manual Received Qty, Technical Price Unit, Unit Price Product UoM в dropdown).
+**Pivot/graph dropdown filtered (v6 update, 2026-05-04):** ранее думал что Odoo автоматически включает ВСЕ numeric fields. **На самом деле:** `invisible="1"` в declared field list inheritance **подавляет** field из measures dropdown. Соответственно скрыты:
+- `product_uom_qty`, `product_qty` (Quantity / Total Qty — distorted на packs)
+- `qty_received`, `qty_invoiced`, `qty_to_invoice` (Received / Billed / To Invoice — distorted)
+- `qty_received_manual` (Manual Received Qty)
+- `price_unit`, `price_unit_product_uom`, `technical_price_unit` (Unit Price* — mixed UoMs / static)
+- `x_studio_sales_price_now` (Sales Price — sum semantics нелогичен; per-line correct в list view)
+
+**Avg Cost (€/stem) added (v6):** custom stored field `x_studio_avg_cost_per_stem` = `price_subtotal / expected_qty` (fallback product_qty / price_unit). Per-line / per-pedido row точно. Total row = sum всех per-line averages (technically wrong для weighted avg) — использовать `Subtotal_sum / Реальные_штуки_sum` для true weighted avg.
+
+**Финальный список measures dropdown в pivot/graph action 756:**
+- Реальные штуки (`x_studio_expected_qty`)
+- Subtotal (€) (`price_subtotal`)
+- Налог (€) (`price_tax`)
+- Total (€ с IVA) (`price_total`)
+- Avg Cost (€/stem) (`x_studio_avg_cost_per_stem`) — per-row точно, Total меньшинский
+- Discount (%)
+- Days to Confirm / Days to Receive (Studio computed)
+- Gross Weight (kg) / Volume (m³) (Studio related)
+- Count (auto)
+- Total purchased amount (price_total дубль из original 2085, оставить или скрыть отдельно)
 
 #### 10.2.6 Что НЕ затронуто (структурно точно)
 
