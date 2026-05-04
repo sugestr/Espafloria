@@ -341,30 +341,53 @@ Margin × badge на `x_studio_margin_x_display` использует порог
 
 Любой случай = «знаем правду, но в `move.quantity` остался старый value». Полезный инвариант для аудита.
 
-#### 10.2.5 Dedicated «Purchase Analysis (поштучно)» action (v5 NEW)
+#### 10.2.5 Финальное решение — patch native action 756 через Studio inheritance (v6, 2026-05-04)
 
-**Меню:** Purchase → Reporting → **Purchase Analysis (поштучно)** (action 1229) — создан рядом с native «Purchase Analysis (пачки)» (action 767, переименован для отличия).
+**Изначальный подход (отменён):** создал dedicated **action 1229 «Purchase Analysis (поштучно)»** на purchase.order.line с custom views (pivot 4667, graph 4670, list 4669) — копия action 756 с pack-aware measures. Idea: оставить native untouched.
 
-**Источник:** `purchase.order.line` напрямую, не purchase.report SQL aggregator. Это даёт доступ к нашим custom полям без агрегационных артефактов.
+**Проблема:** дубль. Action 756 продолжал использоваться native smart-button'ами с product card → showed distorted data. Чтобы свести «smart button → корректный отчёт», нужно было либо custom Python (override action_view_po method), либо хак URL routing. Оба плохо.
 
-**Dedicated views:**
-- pivot 4667
-- graph 4670
-- list 4669
+**Финальное решение:** **patch action 756 across all 3 view types** через Studio inheritance. Native Odoo Purchase History, к которому ведут все smart-button'ы — теперь pack-aware изначально.
 
-**Measures (только агрегируемые stored поля):**
-- Реальные штуки (`x_studio_expected_qty`) — sum
-- Subtotal (€) (`price_subtotal`) — sum
-- Tax / Total / Discount — sum
-- Gross Weight (kg), Volume (m³) — related из product.template
-- Days to Confirm, Days to Receive — computed integer (date arithmetic)
+**Studio inheritance views (extension mode, priority 160):**
+- list view 2084 → inheritance **4666** (added: Real Stems / Margin × badge / Real Price/Stem / Sales Price Now / Supplier Codigo / Days etc; hidden: product_uom_qty / price_unit_product_uom)
+- pivot 2085 → inheritance **4672** (added: Реальные штуки + price measures; hidden product_uom_qty)
+- graph 2086 → inheritance **4673** (то же что pivot, для bar/line)
 
-**Average Cost** — пользоваться `Subtotal / Реальные штуки` мысленно. Это **корректный weighted avg**: sum_subtotal / sum_real_stems = €/stem (то что нам нужно). Native `Average Cost` в (пачках) считает avg of avgs со static factor — distorted.
+**Что patched:**
+- Default measure → `x_studio_expected_qty` (Реальные штуки) вместо product_uom_qty (distorted на packs)
+- List view получил Margin × badge с 4-tier decoration (red/yellow/green/blue) per §A2.7.3 thresholds
+- Real Price/Stem (`x_studio_unit_price_per_stem`) — реальная €/stem
+- Sales Price Now (`x_studio_sales_price_now`) — list_price ex IVA
+- Distorted product_uom_qty / price_unit_product_uom — `optional="hide"` toggle (вернётся если переключить)
 
-**Что НЕ работает как pivot measure:**
-- `x_studio_qty_received_stems` (sum done moves), `x_studio_unit_price_per_stem`, `x_studio_margin_x_1` — computed non-stored, без `aggregator` атрибута. Пытался создать stored — Odoo Online API не принимает `aggregator`/`group_operator` (Python-level only). Эти поля видны только в **list view** через `sum="Sum"`.
+**Что было сделано но удалено (cleanup 2026-05-04):**
+- Action 1229 — удалён (дубль)
+- Menu 738 «Purchase Analysis (поштучно)» — удалён (заменён на menu, ведущий на 756)
+- Views 4667 (pivot), 4669 (list), 4670 (graph) — удалены (custom копии для 1229)
+- Связки act_window.view 428/429/430 — удалены
+- Smart button «Purchase (поштучно)» на product card (xpath в 3119) — удалён (не нужен, native «Purchased» теперь patched)
 
-**Distorted measures скрыты в pivot/graph через `invisible="1"`** — но Odoo всё равно автоматически добавляет ВСЕ numeric fields в Measures dropdown. Это структурное ограничение pivot: declared list только для default-selection, не для exclusion.
+**Reporting menu доступ:** добавлен menu item «Purchase Analysis» под Purchase → Reporting → action 756 (без product context = все продукты, group by product). Native «Purchase Analysis» (action 767, SQL purchase.report) переименован в «(пачки legacy)» — оставлен для сравнения и доступа к Days to Confirm / Receive / Effective Days fields которые есть только на purchase.report SQL view.
+
+**Studio fields, по-прежнему живые (на purchase.order.line):**
+- `x_studio_sales_price_now` (related list_price)
+- `x_studio_margin_x_1` (computed margin × multiplier)
+- `x_studio_margin_x_display` (badge text "×N" или "×N 🌻 cost" для pack)
+- `x_studio_qty_received_stems` (sum stock.move.quantity for done)
+- `x_studio_unit_price_per_stem` (price_subtotal / expected_qty)
+- `x_studio_avg_cost_per_stem` (stored)
+- `x_studio_product_volume` (related)
+- `x_studio_product_weight` (related)
+- `x_studio_days_to_confirm` (computed integer)
+- `x_studio_days_to_receive` (computed integer)
+
+**Что не работает в pivot/graph aggregation (Odoo Online ограничение):**
+- `x_studio_qty_received_stems`, `x_studio_unit_price_per_stem`, `x_studio_margin_x_1` — computed non-stored, без `aggregator` атрибута. Odoo Online API не принимает `aggregator`/`group_operator` (Python-level only). В list view работают через `sum="Sum"` атрибут. В pivot/graph недоступны — для агрегации pack-aware данных используем `x_studio_expected_qty` (stored) как proxy.
+
+**Average Cost weighted:** в pivot — `Subtotal_sum / Реальные_штуки_sum` (мысленное деление двух measures). Корректнее чем native «Average Cost» которая avg-of-avgs.
+
+**Distorted measures в pivot dropdown:** Odoo автоматически включает ВСЕ numeric fields модели как measures. `invisible="1"` в declared list view не подавляет — это структурное ограничение pivot. Live с этим — owner просто игнорирует distorted measures (Quantity, Received Qty, Manual Received Qty, Technical Price Unit, Unit Price Product UoM в dropdown).
 
 #### 10.2.6 Что НЕ затронуто (структурно точно)
 
