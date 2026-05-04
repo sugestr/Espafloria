@@ -1,4 +1,8 @@
-# Server action: 🤖 Claude AI Reconcile Finalize  (v8.0)
+# Server action: 🤖 Claude AI Reconcile Finalize  (v8.1)
+# v8.1 (2026-05-04): hotfix — fields.Datetime.now() → datetime.datetime.now() в safe_eval.
+#                    `fields` НЕ в безопасном scope server-action; `datetime` есть. Из-за этого
+#                    v8.0 retroactive date block тихо ловился в try/except, и **все** pedidos
+#                    из bulk 1-5 получали NOW вместо paper.fecha+1. См. CHANGELOG 2026-05-04.
 # v8.0 (2026-05-03): retroactive delivery date — picking.date_done + stock.move.date +
 #                    purchase.order.date_approve. Logic: paper.fecha (=pedido.date_order
 #                    из Holded import) + 1 day если старше недели; иначе NOW. Stock-side
@@ -196,7 +200,7 @@ for pedido in records:
         # stock.move.date + purchase.order.date_approve. Stock-side only (purchase_method='receive'
         # для цветов = bills отдельным flow). Use pedido.date_order = paper.FECHA (Holded import).
         try:
-            now_dt = fields.Datetime.now()
+            now_dt = datetime.datetime.now()  # v8.1: fields НЕ в safe_eval, datetime есть
             week_ago = now_dt - datetime.timedelta(days=7)
             paper_fecha = pedido.date_order
             if paper_fecha and paper_fecha < week_ago:

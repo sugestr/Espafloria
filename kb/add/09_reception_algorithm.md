@@ -607,6 +607,17 @@ else:
 #### §A3.5 Multi-ref на одну card (MIX consolidate)
 Если N paper.ref'ов матчат одну Odoo MIX-card — создаём **N supplierinfo записей** на тот же template с разными product_code. Это **feature, не bug** — карточка обучается N codigo одновременно. MIX между поставщиками (Verdnatura + Serviflor + Rillo с разными codigo на одну template) тоже OK — не разрушать чужие supplierinfo.
 
+**КРИТИЧНО (v22.0, 2026-05-04 owner directive):** MIX consolidate работает ТОЛЬКО на supplierinfo level. На purchase.order.line **N paper-строк = N pedido-lines**, ВСЕГДА. Никогда не сливать 2+ paper-строк в одну pedido-line, даже если они на одну MIX-карту.
+
+- ❌ НЕТ: line `[171788+171791] RANUN Hanoi+Marleene MIX` qty=40 price=1.65 (avg)
+- ✅ ДА: 2 lines на одну card 8400530:
+  - line 1: `[171788] RANUN Hanoi (Del Golfo)` qty=20 price=1.74 sku=171788
+  - line 2: `[171791] RANUN Marleene (Del Golfo)` qty=20 price=1.56 sku=171791
+
+**Why:** owner смотрит pedido lines как mirror бумаги — 6 строк бумаги должны быть 6 строк pedido. Иначе сложно сверить, теряются индивидуальные цены/qty, искажается analytics («какая роза была дороже»).
+
+**Stock side:** на каждую line — отдельный stock.move на picking. На существующую MIX-карту это даст N stock.move'ов на одну product_id — это ОК, Odoo это поддерживает.
+
 #### §A3.6 Supplierinfo на color/size variants (v20.2 NEW)
 
 Когда card имеет variants (Color / Size / Color×Size combinations) и codigo per variant unique — supplierinfo должна **pin product_id** (variant), а не только product_tmpl_id.
@@ -669,21 +680,50 @@ else:
 |---|---|
 | `name` | `🚧🟠 <paper.concepto>` |
 | `default_code` | `MAX(default_code regex '^84001\d{3}$') + 1` |
-| `barcode` | `default_code` если categ=212 (FLORES CORTADAS); manufacturer barcode допустим если categ ∈ {213, 280, 210, 293, 209} |
+| `barcode` | **NON-EQUIPAMIENTO**: `default_code`. **EQUIPAMIENTO (categ 293)**: `False` (v22.0, 2026-05-04 owner directive: оборудование не продаётся → barcode не нужен). При collision (existing product с тем же barcode) — leave `False` + activity «duplicate barcode». |
 | `categ_id` | по §A4.1 decision matrix |
 | `type` | `'consu'` (Odoo 19 — НЕ `'product'`, устарело) |
 | `is_storable` | `True` (Odoo 19 для tracking inventory) |
 | **`sale_ok`** | **`False`** (v20.2 — карантин не продаётся в живом POS до promotion в clean) |
 | `purchase_ok` | `True` |
-| `list_price` | **`round(paper.PVP * 3 / 1.21, 2)`** (×3 markup ex IVA — стандартная розничная наценка Espafloria, IVA снимается т.к. tax mode = `tax_excluded` → list_price хранится ex IVA, customer-facing цена = list_price × 1.21). **Всегда ставим ×3 baseline для любой категории** (включая EQUIPAMIENTO, PUBLICIDAD) — owner делает review цен после, но 0 не оставляем (v21.10, 2026-05-03 owner directive). |
-| `standard_price` | paper.PVP (опционально — Odoo сам подхватит из supplierinfo при первом receive) |
+| `list_price` | **NON-EQUIPAMIENTO**: `round(standard_price * 3, 2)` ex IVA (×3 от закупки, owner правило). **EQUIPAMIENTO (categ 293)**: `0` (v22.0 — не на продажу, цена не нужна). Owner делает review цен после, но fall-back baseline = cost×3. Если paper.PVP отсутствует и cost=0 → fall-back `round(paper.PVP * 3 / 1.21, 2)` (PVP customer-facing × 3 / 1.21). |
+| `standard_price` | **paper.PVP per uom (ex-VAT)** — обязательно ставим, не оставляем 0. Odoo подхватит supplierinfo при первом receive, но baseline нужен сразу для list_price расчёта. |
+| **`supplier_taxes_id`** | **`[68]` ("10% G" purchase, локальный испанский налог)**. **НИКОГДА `[20]` ("10% EU G")** — это для покупок из других стран ЕС, а Verdnatura — испанский поставщик. Аналогично 21% продукты — `[7]` ("21% G" purchase), не EU-вариант (v22.0, 2026-05-04 hotfix). |
+| `taxes_id` | `[82]` ("10% G" sale) или `[5]` ("21% G" sale) по категории |
 | `uom_id` | 1 (Tallo) или 31 (Paquete) по UD VENTA. **Поле `uom_po_id` НЕ существует на product.template в Odoo 19** — оно только на `product.supplierinfo`. |
 | `purchase_method` | `'receive'` |
 | `description_purchase` | `Auto-created by Claude AI <date> from paper {ref} {concepto} {productor}. Атрибуты: {paper sub-line attrs}` |
+| **`description`** (INTERNAL NOTES) | **MANDATORY (v22.0)** — структурированный HTML-блок, документирующий ПРИЧИНУ и АВТОРА создания (правило CLAUDE.md: каждая карточка должна иметь описание ЗАЧЕМ и кем создана). Формат: см. §A5.4 ниже. |
 | `x_studio_codigo_fabrica` | paper.ref |
-| **`image_1920`** | `set_binary_field(source='https://cdn.verdnatura.es/image/catalog/1600x900/<paper.ref>')`, 404 → leave empty |
+| **`image_1920`** | `set_binary_field(source='https://cdn.verdnatura.es/image/catalog/1600x900/<paper.ref>')`, 404 → leave empty + note в description |
 
 После create — **mandatory chatter с ПРИЧИНОЙ** (см. §C5) + supplierinfo upsert (§A3) + **activity на pedido** (см. §A5.3 «New card → physical price tag reprint»).
+
+#### §A5.4 INTERNAL NOTES (description) шаблон — MANDATORY (v22.0, 2026-05-04)
+
+**Owner правило (CLAUDE.md):** «каждая карточка должна иметь описание ЗАЧЕМ и кем она была создана». Применимо как к ботом-созданным, так и manual картам. Бот заполняет автоматом, manual create — owner вручную.
+
+**HTML-шаблон для бот-карты:**
+
+```html
+<p>🤖 Карта создана ботом Claude (auto-reception v{spec_version}) {YYYY-MM-DD}<br/>
+Из pedido: {pedido_id} (Holded {ac_ref} / Vendor ref {paper_vref})<br/>
+Verdnatura SKU: {paper_ref} {paper_concepto} ({paper_productor})<br/>
+Cost (paper PVP/u, ex-VAT): {standard_price} €<br/>
+Sales price: {list_price} € (×3 от закупки, ex-VAT) | или «— (категория EQUIPAMIENTO, не на продажу)»<br/>
+Photo: https://cdn.verdnatura.es/image/catalog/1600x900/{paper_ref} | + (404 — нет фото на CDN, ручно добавить) если 404<br/>
+Цель: новый продукт обнаружен в paper PDF Verdnatura, не было в каталоге → ботом auto-created для приёмки.<br/>
+Проверить: фото, описание, цена, налог (см. CLAUDE.md правило новой карты).</p>
+```
+
+**Обязательные элементы:**
+1. **Кем создана** (🤖 Claude vs manual user) + версия spec
+2. **Из какого pedido** (id + Holded AC ref + Vendor ref)
+3. **Verdnatura SKU** + concepto + productor
+4. **Cost / Sales price** (с пометкой ×3 или «не на продажу»)
+5. **Photo URL** (с пометкой 404 если CDN не вернул)
+6. **Цель** (зачем создавали — обнаружено в paper, не было в каталоге)
+7. **Что проверить** owner'у
 
 #### §A5.3 New card → physical price tag reprint activity (v21.7 NEW)
 
