@@ -1,4 +1,4 @@
-<!-- v: 12 | updated: 2026-05-08T17:00Z -->
+<!-- v: 13 | updated: 2026-05-09T00:00Z -->
 # 99. Invariants — железные правила проекта
 
 **Читать перед любыми изменениями в системе.** Нарушение этих правил создаёт техдолг, ломает бот или теряет данные.
@@ -24,6 +24,7 @@
 - `add/03_review_status_automation.py` ↔ `ir.actions.server id=1146`
 - `add/04_bouquet_on_payment_action.py` ↔ `ir.actions.server id=1203`
 - `add/04_bouquet_on_dismantle_action.py` ↔ `ir.actions.server id=1209`
+- `add/09_create_card_from_supplier_action.py` ↔ `ir.actions.server id=1239`
 
 ### 3. Не мигрировать на Odoo.sh без жёсткой нужды
 Сейчас мы на **Odoo Online (SaaS) Custom**. Переход на Odoo.sh — **one-way** (после `custom_addons` обратно нельзя). **Сначала всё что можно — штатно на Online** (Studio + Automated Actions + Server Actions с Python разрешены).

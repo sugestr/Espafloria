@@ -1,4 +1,4 @@
-<!-- v: 6 | updated: 2026-05-08T22:00Z -->
+<!-- v: 7 | updated: 2026-05-09T00:00Z -->
 # 09. Pedido — работа с purchase orders
 
 **Что в файле:** домен `purchase.order` (закупки у поставщиков): источники, жизненный цикл, reconciliation paper PDF ↔ Odoo, action 1217 finalizer, supplierinfo learning, partner_id Verdnatura, Serviflor ChatGPT pipeline (§ 12). Reception_algorithm — главный artefact в `add/09_reception_algorithm.md`.
@@ -417,7 +417,8 @@ Tab «Products» в pedido form — `purchase.order.line` tree view. Customizati
 
 - **Photo pair** (Our photo + Supplier photo) — визуальная сверка «правильно ли заматчили». Если визуально совпадает → confidence ОК.
 - **Alt → click** — server action 1236 cycles `product_id` через `x_studio_alternative_cards` без изменения qty/price (server-side write минует product_id onchange). Counter `Alt` обновляется.
-- **New + click (grey)** — confirm dialog «Нужна ли действительно новая карта? Попробуй сначала Alt». Если ОК → server action 1239 (placeholder сейчас, Step 3 TODO). Защита от случайного создания дубликатов.
+- **New + click (grey)** — confirm dialog «Нужна ли действительно новая карта? Попробуй сначала Alt». Если ОК → server action 1239 (Step 3, реализован). Защита от случайного создания дубликатов.
+- **New + click (red)** — для статуса `create_new`. Без confirm, сразу триггерит 1239.
 - **New + click (red)** — то же действие, но цвет красный сигнализирует «агент рекомендует новую карту, alternatives нет/не подходят».
 
 ### 13.6. Studio fields catalog (созданные для Mode B)
@@ -452,7 +453,7 @@ Identity key field — на `product.supplierinfo`:
 |---|---|---|---|
 | 1236 | Cycle to next match | tree button on line | rotates `product_id` через `alternative_cards`. **Не** меняет confidence. **Не** триггерит product_id onchange (preserves qty/price/taxes/uom). |
 | 1237 | Verify match (mark confident) | unused | обнавливает `match_confidence='confident'`. Не используется в текущей UI. |
-| 1239 | Create card from supplier | tree button on line | **Placeholder** для Step 3. Сейчас постит chatter note. TODO полная реализация: fetch photo URL → image_1920, создать template+variant в карантине, supplierinfo с identity key, привязать к pedido.line. |
+| 1239 | Create card from supplier | tree button on line | **Implemented (Step 3)** — создаёт `product.template` (auto-variant) в категории `⛔ Карантин Holded` (id=207), SKU = next free `8400xxx`, cost=line.price_unit, list_price=cost×3, taxes_id=82 (sales 10% R), supplier_taxes_id=68 (purchase 10% R), Holded Link = supplier_photo_url, supplierinfo с composite identity key, back-link через chatter на pedido + на новой карте, `mail.activity` TODO «Загрузить фото и проверить карту» deadline +7 дней. После create открывает форму карты в modal. **Фото загружается вручную** — auto-fetch URL→image_1920 невозможен на Odoo Online (см. §13.10). |
 | 1240 | Migrate item_comment char→text | unused | Не понадобилась — финальное решение через computed text mirror. |
 | 1234 | Retro-fix Serviflor TMP/INT | executed 2026-05-08 | One-shot, выполнен. |
 
@@ -482,18 +483,48 @@ Logist decide.
 - 🟠 REVIEW = candidates, цикли через Alt
 - 🔴 (или 🚧) = create_new или blocker
 
-### 13.9. Roadmap — что построить далее (после #13 пилота)
+### 13.9. Step 3 — Create card from supplier (реализовано 2026-05-08)
 
-**Step 3 — Create card from supplier action (полная реализация)** 🔴
-- Fetch photo по supplier_photo_url → product.image_1920 (через `requests` или urllib)
-- Create `product.template` + `product.product` в категории `⛔ Карантин Holded` (id=207, потом → новый clean catalog hierarchy когда будет создана)
-- Apply `supplier_taxes_id` (10% R для цветов/растений, 21% G для аксессуаров)
-- `default_code` = из VBN если стабильный, иначе sequence `SV-NEW-<YYYYMMDD>-N`
-- Create `product.supplierinfo` с composite identity key
-- Assign new product to current pedido.line (`product_id`)
-- Set `match_confidence='confident'`
-- Open new card в form view для логиста чтобы он подкорректировал детали
-- Поведение «if doubts — undo» — placeholder с подтверждением + chatter лог.
+Server action 1239 на pedido.line button. Полная цепочка:
+
+**Что делает:**
+1. **Name** — из `line.name`, с префиксом `🚧🟠 <name> (auto-created)` чтобы было видно карты-черновики в каталоге.
+2. **SKU (`default_code`)** — scan существующих `8400xxx`, берём next free integer. Карантинная band 84000000-84099999 зарезервирована под auto-created карты.
+3. **Category** — `⛔ Карантин Holded` (id=207). Все новые карты падают сюда независимо от типа товара. После Step 6 (clean catalog hierarchy) — переключиться на категоризацию по keywords.
+4. **Pricing** — `standard_price = line.price_unit`, `list_price = cost × 3` (наценка по дефолту, флорист поправит).
+5. **Taxes** — `taxes_id=[82]` (sales 10% R), `supplier_taxes_id=[68]` (purchase 10% R). Hardcoded для цветов; при категоризации не-цветочной продукции — поправить вручную.
+6. **Holded Link (`x_studio_holded_url`)** — переиспользуем существующее поле под supplier_photo_url. Это URL картинки на CDN поставщика (Serviflor FloraPlaza или Verdnatura cdn.verdnatura.es). Логист открывает Link → правый клик → Save Image → upload в product image на форме.
+7. **Supplierinfo** — создаётся запись `product.supplierinfo` с `partner_id=line.partner_id`, `price=line.price_unit`, `product_code=line.x_studio_supplier_identity_key` (composite SV|ART|COLOR|...), `product_name=line.name`. Это и есть «обучение» — при следующих pedido та же L1 запись подхватит карту автоматически.
+8. **Привязка к line** — `line.product_id = new_template.product_variant_id.id`, `line.x_studio_match_confidence='confident'`. **Не** триггерит product onchange (preserves qty/price/taxes на line).
+9. **Back-link** — `mail.message` чаттер пост на pedido (с link на новую карту) и на новой карте (с link на pedido + WHY/SOURCE/PRICING). Trace «откуда пришла карта».
+10. **Activity TODO** — `mail.activity` с deadline +7 дней «Загрузить фото и проверить карту» назначается логисту. Чтобы карта не оставалась с placeholder image.
+11. **Open form** — после create возвращаем `ir.actions.act_window` `target='new'` (modal popup) на новую карту чтобы логист сразу мог подправить.
+
+**Composite identity key (Supplier Identity Key)** — формат:
+```
+SV|ART:<artikel>|COLOR:<color>|ORIGIN:<origin_code>|GROWER:<grower>|HEIGHT:<height>|POT:<pot>|PIECES_UNIT:<n>|UNITS_PER_PACK:<n>|PACK_MODE:UNIT
+```
+Все поля опциональны (если поставщик не передал — пропускается). Ключ детерминированный → один и тот же товар у поставщика всегда даёт один и тот же key → одна supplierinfo запись → 1:1 mapping в L1.
+
+### 13.10. Photo storage — manual upload only
+
+**Auto-fetch URL → image_1920 на Odoo Online: невозможно.** Все пути упираются:
+- `safe_eval` server actions не пускают `import requests` / `import urllib` (`Forbidden opcode IMPORT_NAME`).
+- `base_import.execute_import` ожидает base64 в `image_1920`, не URL — даёт `Incorrect padding` exception.
+- Прямая запись URL string в `image_1920` не триггерит fetch (поле бинарное, ждёт bytes).
+- Custom JS widget — нет на Online.
+- Custom Python module — нет на Online (только Odoo.sh).
+
+**Текущий workflow (manual):**
+1. Server action 1239 пишет supplier_photo_url в `x_studio_holded_url`.
+2. Логист открывает форму карты (она открывается автоматически в modal).
+3. Кликает на Holded Link (`widget="url"` → ссылка кликабельная) → открывает картинку в новом tab.
+4. Save image → drag&drop в image-zone карты product → Save.
+5. После выгрузки внешнего хостинга → картинка хранится локально в Odoo навсегда.
+
+**Будущий путь (Make.com бот, Step 4):** Бот при создании pedido draft заранее fetch'ит supplier_photo_url → base64 → записывает в `x_studio_supplier_photo_b64`. Server action 1239 при create декодирует base64 → image_1920 (это safe_eval разрешает: `b64decode` доступен через `base64` module если он whitelisted, иначе через работу с bytes напрямую). Итог: zero-click card creation с фото.
+
+### 13.11. Roadmap — что построить далее
 
 **Step 4 — Make.com бот integration** 🔴
 - Route 1 (current OCR + reconciliation) дополнить:

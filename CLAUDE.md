@@ -32,6 +32,16 @@
 ### Перед массовыми операциями — тест на одной записи
 Миграция карточек, bulk-update полей, массовое изменение `purchase_method` — сначала **ОДНА** запись, проверка результата, потом batch.
 
+### BOOKKEEPER_TRUST closure mode — **запрещён** (галлюцинация)
+Owner verdict 2026-05-05: первый проход sub-agent'а с режимом «trust Holded amount, skip paper-truth» был **корявый и ошибочный**. Bookkeeper кладёт строчки в Holded с recount qty но часто без правильной цены (0 или wrong) — sum получается случайным. Проверка на 6 pedido показала что BOOKKEEPER_TRUST занижал суммы в среднем **в 15 раз** (47864: 211€→571€, 47876: 12€→192€, 47879: 9€→184€).
+
+**Правило:**
+- Никогда не закрывать pedido по amount=Holded без paper-truth verify.
+- Если paper PDF доступен — обязательно extract paper lines + amount_total = paper_subtotal + IVA exact.
+- Если paper нет — оставлять draft+activity, не закрывать.
+- Sub-agent инструкции при retro-fix: явно forbid «BOOKKEEPER_TRUST» как валидную ветку.
+- В spec/algorithm v22.x sum-gate «amount>0 AND все lines have product_id → close» — убрать как валидную закрывающую логику.
+
 ### Не мигрировать на Odoo.sh без жёсткой нужды
 Сейчас Odoo Online Custom. Переход — **one-way**. Сначала всё что можно — штатно на Online. Жёсткие триггеры миграции — когда хотелка физически невозможна на Online.
 
