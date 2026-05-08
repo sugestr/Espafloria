@@ -1,0 +1,24 @@
+{
+  "status": "INCOMPLETE",
+  "date": "2025-12-18",
+  "key": "14646628",
+  "online": [
+    "Order_14646628.xlsx"
+  ],
+  "processed": [],
+  "facturas": [],
+  "workbook": "2025-23-12 - Vilassar.xlsx",
+  "note": "Factura not found. Do not run production import until factura is added.",
+  "folder_name": "2025-12-18__online_14646628__INCOMPLETE",
+  "copied": {
+    "online": [
+      "Order_14646628.xlsx"
+    ],
+    "processed": [],
+    "facturas": [],
+    "workbook": [
+      "2025-23-12 - Vilassar.xlsx"
+    ]
+  },
+  "missing": []
+}

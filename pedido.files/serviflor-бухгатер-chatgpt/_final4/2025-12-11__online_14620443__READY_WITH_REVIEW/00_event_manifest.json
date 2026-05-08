@@ -1,0 +1,28 @@
+{
+  "status": "READY_WITH_REVIEW",
+  "date": "2025-12-11",
+  "key": "14620443",
+  "online": [
+    "Order_14620443.xlsx"
+  ],
+  "processed": [],
+  "facturas": [
+    "FRA 7630.pdf"
+  ],
+  "workbook": "2025-12-15 - Vilassar.xlsx",
+  "note": "Factura much smaller than online; likely partial fulfillment/returns. Subagent must line-check.",
+  "folder_name": "2025-12-11__online_14620443__READY_WITH_REVIEW",
+  "copied": {
+    "online": [
+      "Order_14620443.xlsx"
+    ],
+    "processed": [],
+    "facturas": [
+      "FRA 7630.pdf"
+    ],
+    "workbook": [
+      "2025-12-15 - Vilassar.xlsx"
+    ]
+  },
+  "missing": []
+}

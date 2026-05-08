@@ -1,0 +1,34 @@
+{
+  "status": "INCOMPLETE",
+  "date": "2026-04-28",
+  "key": "14983602",
+  "online": [
+    "Order_14983602-4.xlsx"
+  ],
+  "processed": [
+    "Order_14981457-4.xlsx",
+    "Order_14981805-4.xlsx"
+  ],
+  "facturas": [
+    "Factura2971_2026.pdf"
+  ],
+  "workbook": null,
+  "note": "Processed split matches online, but main factura is missing; only credit note found. Do not run production import.",
+  "folder_name": "2026-04-28__online_14983602__INCOMPLETE",
+  "copied": {
+    "online": [
+      "Order_14983602-4.xlsx"
+    ],
+    "processed": [
+      "Order_14981457-4.xlsx",
+      "Order_14981805-4.xlsx"
+    ],
+    "facturas": [
+      "Factura2971_2026.pdf"
+    ],
+    "workbook": []
+  },
+  "missing": [
+    "workbook_missing"
+  ]
+}

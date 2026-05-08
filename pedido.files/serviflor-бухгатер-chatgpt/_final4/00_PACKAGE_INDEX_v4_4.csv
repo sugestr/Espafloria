@@ -1,0 +1,15 @@
+﻿Online event,Online order / base,Processed / Todas,Factura / оплата,Workbook бухгалтера,Holded / Compras evidence,Статус,Комментарий
+2025-12-11,14620443 / 521.27,нет,7630 base 306.22; factura меньше online на 215.05,2025-12-15 - Vilassar.xlsx,Compras SKU evidence: 007630,READY_WITH_REVIEW,частичное исполнение / возврат / не вся бумага; использовать Compras SKU hints
+2025-12-18,14646628 / 575.02,нет,007893 base 553.42 total 608.76; найдена в Compras 2025,2025-23-12 - Vilassar.xlsx,Compras factura evidence: 007893,READY_WITH_REVIEW,раньше была INCOMPLETE; теперь сверить difference online vs factura
+2026-01-06,14673176 / 2242.93,"14668590-2: 20/31 строк, base 1510.01",81 + 113 base 2165.73,2026-01-09 - Vilassar.xlsx,Albarán AC260366 + Compras 81/113,READY_WITH_REVIEW,partial processed; line-level check
+2026-01-08,14676750 / 748.90,нет,128 base 748.90 совпадает,2026-01-13 - Vilassar Hecho.xlsx,Albarán AC260368 + Compras 128,READY,чистый пакет
+2026-01-15,14695212 / 966.35,нет,238 base 993.65; grouped compras 195/238/240,2026-01-19 - Vilassar.xlsx,2 albaranes + Compras grouped facturas,READY_WITH_REVIEW,вероятно доставка/коррекция; проверить 195/240
+2026-01-22,14710273 / 1842.66,нет,358 base 1858.64,2026-01-26 - Vilassar.xlsx,2 albaranes + Compras 358,READY_WITH_REVIEW,тара/коррекции
+2026-01-28/29,14721344 + 14723837 / 718.40,нет,494 base 782.54,2026-02-02 - Vilassar_.xlsx,2 albaranes + Compras 494 draft,READY_WITH_REVIEW,тара/возвраты
+2026-02-26,14807019 / 1823.94,нет,001137 base около 1675.94 total 1857.50; найдена в Compras 2026,2026-03-02 - Vilassar.xlsx,Compras SKU evidence: 001137,READY_WITH_REVIEW,раньше была INCOMPLETE; использовать Compras SKU hints
+2026-03-10,14851852 / 1569.31,"14851690-2: полный дубль, base 1569.31",1369 base 1643.31,2026-03-12 - Vilassar.xlsx,3 albaranes + Compras 1369,READY_WITH_REVIEW,похоже тара 56 + 18
+2026-03-12,14855590 / 820.32,нет,1461 base 886.32,2026-03-16 - Vilassar.xlsx,Compras 1461,READY_WITH_REVIEW,похоже тара 60 + 6
+2026-03-26,14884803 / 1897.85,нет,1797 base 1905.35,2026-03-30 - Vilassar.xlsx,3 albaranes + Compras 1797,READY_WITH_REVIEW,маленькая qty/price correction
+2026-04-07,14921295 / 1065.20,"14921022-2: near-match, total совпадает",2057 base 1065.20 совпадает,2026-04-09 - Vilassar.xlsx,нет,READY,чистый пакет
+2026-04-28,14983602 / 1838.07,split: 14981457 + 14981805 = 1838.07,002874/2026 base 1838.07 total 2021.88; credit note 2971 -117 base,нет,credit note/factura evidence,READY_WITH_REVIEW,нет workbook; проверить credit note
+2026-05-05,15000475 / 2362.28,"14995845-2: near-match, total совпадает",3031 base 2362.28 совпадает,нет,нет,READY_NO_BOOKKEEPER,нет workbook; нельзя production без split/recount

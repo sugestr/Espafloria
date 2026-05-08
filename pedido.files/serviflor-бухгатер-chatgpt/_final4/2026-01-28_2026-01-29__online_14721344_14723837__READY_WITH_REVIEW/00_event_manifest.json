@@ -1,0 +1,30 @@
+{
+  "status": "READY_WITH_REVIEW",
+  "date": "2026-01-28_2026-01-29",
+  "key": "14721344_14723837",
+  "online": [
+    "Order_14721344.xlsx",
+    "Order_14723837.xlsx"
+  ],
+  "processed": [],
+  "facturas": [
+    "000494 SERVIFLOR VILASSAR SL.pdf"
+  ],
+  "workbook": "2026-02-02 - Vilassar_.xlsx",
+  "note": "Two online orders likely one supply event; factura includes packaging returns/adjustments.",
+  "folder_name": "2026-01-28_2026-01-29__online_14721344_14723837__READY_WITH_REVIEW",
+  "copied": {
+    "online": [
+      "Order_14721344.xlsx",
+      "Order_14723837.xlsx"
+    ],
+    "processed": [],
+    "facturas": [
+      "2026-02-03/000494 SERVIFLOR VILASSAR SL.pdf"
+    ],
+    "workbook": [
+      "2026-02-02 - Vilassar_.xlsx"
+    ]
+  },
+  "missing": []
+}

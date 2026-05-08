@@ -1,0 +1,32 @@
+{
+  "status": "READY",
+  "date": "2026-04-07",
+  "key": "14921295",
+  "online": [
+    "Order_14921295.xlsx"
+  ],
+  "processed": [
+    "Order_14921022-2.xlsx"
+  ],
+  "facturas": [
+    "Factura2057_2026.pdf"
+  ],
+  "workbook": "2026-04-09 - Vilassar.xlsx",
+  "note": "Online/processed/factura totals match; minor naming/representation differences only.",
+  "folder_name": "2026-04-07__online_14921295__READY",
+  "copied": {
+    "online": [
+      "Order_14921295.xlsx"
+    ],
+    "processed": [
+      "Order_14921022-2.xlsx"
+    ],
+    "facturas": [
+      "Factura2057_2026.pdf"
+    ],
+    "workbook": [
+      "2026-04-09 - Vilassar.xlsx"
+    ]
+  },
+  "missing": []
+}

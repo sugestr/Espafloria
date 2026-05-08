@@ -1,0 +1,1 @@
+Included 000081 in clean PO. Excluded 000113 as blocker/review due to missing product.product mapping for returnable packaging/deposit lines. Import 1 then 1b before confirming RFQ. Verify price mapping and Odoo line amounts.

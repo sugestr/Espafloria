@@ -1,4 +1,4 @@
-<!-- v: 11 | updated: 2026-05-03T00:00Z -->
+<!-- v: 12 | updated: 2026-05-08T17:00Z -->
 # 99. Invariants — железные правила проекта
 
 **Читать перед любыми изменениями в системе.** Нарушение этих правил создаёт техдолг, ломает бот или теряет данные.
@@ -91,6 +91,21 @@ Odoo каскадирует `template.active` → `variants.active` автома
 
 ### G11. `sale.order.line.discount` перезатирается на create (pricelist onchange)
 При `create([{..., 'discount': X, ...}])` дисконт теряется из-за pricelist onchange. **Решение:** после create сделать `.write({'discount': X})` на линиях.
+
+### G12. `Operation Type` текстом в xlsx import → Temporal warehouse trap
+Если в xlsx import-файле для `stock.picking` колонка **Operation Type** содержит текст («Internal Transfers», «Receipts», etc) и Odoo **не находит точного матча** среди существующих `stock.picking.type` — Odoo молча создаёт новый **fallback warehouse «Temporal»** (id=5, code=TMP) с 4 picking_types (TMP/IN, TMP/INT, TMP/OUT, TMP/POS) и 2 locations (TMP, TMP/Stock). Все «не сопоставленные» пикинги попадают туда — stock-движение корректное (locations правильные), но warehouse_id и reports per-warehouse сломаны.
+
+**Lesson learned 2026-05-08:** 11 Serviflor internal transfers (events Dec'25→Apr'26) попали в Temporal через ChatGPT-импорт. Ретро-фикс через server action 1234 (SQL UPDATE picking_type_id, минуя constraint state=done) перевесил их на корректные per-warehouse pt=16/25/34 по source location. См. [09_pedido § 11.9](09_pedido.md).
+
+**Anti-rule для будущих imports:**
+- Использовать `Operation Type/Database ID` (numeric) вместо текста.
+- DB IDs known: PLA Internal=16, GLO Internal=25, BLA Internal=34. Cross-warehouse → picking_type source warehouse.
+- Если DB ID неизвестен — **не импортировать**, найти DB ID через Settings → Inventory → Operation Types.
+
+**Note:** Owner намеренно держит Temporal warehouse активным как «garbage bucket» — туда уходят orphaned `stock.move` (picking_id=False) от исторических retro-fix'ов когда Odoo не позволяет менять uom/qty на done moves. К концу дня условно должно быть пусто. См. [09_pedido § 12.7](09_pedido.md).
+
+### G13. `stock.picking.warehouse_id` в Odoo 19.2 — computed, не stored
+Колонки `warehouse_id` в SQL-таблице `stock_picking` **не существует** — поле `related='picking_type_id.warehouse_id'` без `store=True`. Прямой `UPDATE stock_picking SET warehouse_id=X` ломается с `UndefinedColumn`. Меняй только `picking_type_id`, warehouse_id выведется на лету при чтении. То же подозрение про `stock.move.warehouse_id` — не проверено, но безопаснее не трогать в SQL. (Зафиксировано из инцидента server action 1234 первого захода 2026-05-08.)
 
 ---
 

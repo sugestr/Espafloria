@@ -1,0 +1,34 @@
+{
+  "status": "READY_WITH_REVIEW",
+  "date": "2026-01-06",
+  "key": "14673176",
+  "online": [
+    "Order_14673176.xlsx"
+  ],
+  "processed": [
+    "Order_14668590-2.xlsx"
+  ],
+  "facturas": [
+    "000081 SERVIFLOR VILASSAR SL.pdf",
+    "Fra 113.pdf"
+  ],
+  "workbook": "2026-01-09 - Vilassar.xlsx",
+  "note": "Processed/Todas covers only part of online; facturas need line-level explanation.",
+  "folder_name": "2026-01-06__online_14673176__READY_WITH_REVIEW",
+  "copied": {
+    "online": [
+      "Order_14673176.xlsx"
+    ],
+    "processed": [
+      "Order_14668590-2.xlsx"
+    ],
+    "facturas": [
+      "2026-01-09/000081 SERVIFLOR VILASSAR SL.pdf",
+      "Fra 113.pdf"
+    ],
+    "workbook": [
+      "2026-01-09 - Vilassar.xlsx"
+    ]
+  },
+  "missing": []
+}

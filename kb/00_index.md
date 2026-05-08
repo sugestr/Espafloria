@@ -178,7 +178,7 @@ kb/
 | Google Sheets: products | [link](https://docs.google.com/spreadsheets/d/1ep4WA5ciu2R1-mVx9Ish2dGH1s9kdjVECGkkGBCsBaE) | ETL справочник Holded→Odoo |
 | Google Sheets: albaran | [link](https://docs.google.com/spreadsheets/d/1apNcpf7-44OGQVb39wNfZBU7INv3iyTGEFsZVOvH_58) | ETL для albaran→pedido |
 | Регламент сотрудников | Google Doc (legacy, Holded-based) | Ждёт переработки под Odoo |
-| Paper PDF / data | `../pedido.files/reception_paper/`, `../pedido.files/verdnatura/`, `../pedido.files/serviflor/` | На уровне выше KB (data, не KB). `serviflor/` — Compras Exportar items 2025+2026, Product Variant export, Supplier Pricelist export, odoo-pedido CSV, selection analysis xlsx, event index xlsx — справочники для ChatGPT-промта v9.1. |
+| Paper PDF / data | `../pedido.files/reception_paper/`, `../pedido.files/verdnatura/`, `../pedido.files/serviflor-бухгатер-chatgpt/` | На уровне выше KB (data, не KB). `serviflor-бухгатер-chatgpt/` — historical archive supervisor'а: `_final4/<event>/` (per-event inputs 14 events), `_final4/справочники/` (Compras 2025/2026, Product Variant, Supplier Pricelist, odoo-pedido CSV, selection analysis), `promts/` (17 версий v4_5→v9.1, эволюция), `__out/_done/<event>/` (агентовы output ZIPs для 12 успешных импортов), `serviflor_event_index.xlsx` (master index 14 events). |
 
 ---
 

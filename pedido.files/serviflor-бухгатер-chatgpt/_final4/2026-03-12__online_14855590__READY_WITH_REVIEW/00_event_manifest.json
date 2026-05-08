@@ -1,0 +1,28 @@
+{
+  "status": "READY_WITH_REVIEW",
+  "date": "2026-03-12",
+  "key": "14855590",
+  "online": [
+    "Order_14855590.xlsx"
+  ],
+  "processed": [],
+  "facturas": [
+    "Factura1461_2026.pdf"
+  ],
+  "workbook": "2026-03-16 - Vilassar.xlsx",
+  "note": "Factura higher by likely packaging: Galleda/Alça. Line-check required.",
+  "folder_name": "2026-03-12__online_14855590__READY_WITH_REVIEW",
+  "copied": {
+    "online": [
+      "Order_14855590.xlsx"
+    ],
+    "processed": [],
+    "facturas": [
+      "Factura1461_2026.pdf"
+    ],
+    "workbook": [
+      "2026-03-16 - Vilassar.xlsx"
+    ]
+  },
+  "missing": []
+}

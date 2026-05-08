@@ -1,4 +1,4 @@
-<!-- v: 4 | updated: 2026-05-08T16:00Z -->
+<!-- v: 5 | updated: 2026-05-08T17:00Z -->
 # 09. Pedido — работа с purchase orders
 
 **Что в файле:** домен `purchase.order` (закупки у поставщиков): источники, жизненный цикл, reconciliation paper PDF ↔ Odoo, action 1217 finalizer, supplierinfo learning, partner_id Verdnatura, Serviflor ChatGPT pipeline (§ 12). Reception_algorithm — главный artefact в `add/09_reception_algorithm.md`.
@@ -197,16 +197,27 @@ draft (Holded import / bot Route 1)
 | 11.5 | OLD_ SKU awareness в bot для исторических pedido | 🔴 |
 | 11.6 | Multi-warehouse split одного albarán | 🔴 (custom) |
 | 11.7 | **Post-bulk vendor price audit** (после full bulk Verdnatura ~167 pedido) — single subagent run: пройти все templates с >1 supplierinfo Verdnatura, применить scaled threshold (avg<3€ → ratio≤2.5+abs≤1.5; <8€ → 1.7+3; <20€ → 1.4+5; >20€ → 1.25+10), flag suspicious через `mail.activity` на template + `@Andriy` mention. Owner идёт по полкам / открывает activities → решает split / keep на каждой. Это catch-up на bookkeeper miss-matches которые subagent не отловил. | 🔴 (after bulk done) |
-| 11.8 | Serviflor 2 заблокированных events (28 апр factura 2874 + credit note 2971; 5 мая factura 3031) — нет workbook бухгалтера. Решение до cutover: либо бухгалтер делает workbook, либо production без split (один primary warehouse, recount by paper только), либо оставить в Holded read-only. | 🟡 (см. § 12.4) |
+| 11.8 | Serviflor 2 заблокированных events (28 апр factura 2874 + credit note 2971; 5 мая factura 3031) — нет workbook бухгалтера. Решение: **#13 (28 апр)** — догон в Mode A через Flora-файл (логист+флористы) как заменитель bookkeeper workbook; **#14 (5 мая)** — пилот нового workflow Mode B без бухгалтера. | 🟡 в работе (см. § 13) |
+| 11.9 | Retro-fix 11 Serviflor TMP/INT pickings → правильные per-warehouse picking_types (16/25/34 по source location) | ✅ done 2026-05-08 (server action 1234, SQL UPDATE bypass constraint state=done; 130 связанных stock.move согласованы; Temporal warehouse 5 оставлен активным как garbage bucket; см. [99_invariants G12 + G13](99_invariants.md)) |
 
 ---
 
 ## 12. Serviflor pipeline (ChatGPT v9.1-lite)
 
 ### 12.1. Зачем отдельный pipeline
-У Serviflor **нет стабильного supplier `codigo`** на товарах — каждый раз новые SKU. Make.com бот учит supplierinfo по `(partner, codigo)` → у Serviflor этот ключ не стабильный. Решение: учим pricelist через **композитный Supplier Identity Key** (ART + COLOR + ORIGIN + GROWER + POT + HEIGHT + QUALITY + PIECES_UNIT + UNITS_PER_PACK + PACK_MODE) — атрибуты заказа становятся идентичностью.
+У Serviflor **нет стабильного supplier `codigo`** на товарах — на новой поставке тот же физический товар может прийти с другим VBN (другой производитель на аукционе). Make.com бот учит supplierinfo по `(partner, codigo)` → у Serviflor этот ключ не стабильный, прямой матч по нему опасен (попадание в чужую карту).
 
-Поэтому Serviflor backfill идёт **внешним ChatGPT-каналом**, не через Make.com бот. Промт — [add/09_serviflor_chatgpt_prompt_v9.1.txt](add/09_serviflor_chatgpt_prompt_v9.1.txt).
+`Codigo de fabricacion` у Serviflor — **нестрогий**: список кодов через запятую, trace-ID партии, иногда пусто, иногда повторяется на разных товарах. Примеры: `0027, 11920, 146548, ...` или `RANUBUL, RANUBUSA, ...`. Это **не строгий SKU**.
+
+Решение — 4-уровневая модель идентификации:
+- **Supplier Product Name** — человекочитаемое имя + атрибуты (color, origin, grower, height, pot, pack info)
+- **Supplier Codigo** — **только если** реальный reusable supplier code; если у Serviflor только trace-ID — оставляем пустым
+- **Supplier Identity Key** — композитный semantic ключ для recognition memory: `SV|ART:<name>|COLOR:<c>|ORIGIN:<co>|GROWER:<g>|POT:<p>|HEIGHT:<h>|QUALITY:<q>|PIECES_UNIT:<pu>|UNITS_PER_PACK:<up>|PACK_MODE:<PACK|UNIT>|ATTR:<...>`. Главный ключ matching.
+- **Supplier Lot Code** — trace конкретной поставки (factura row + online row + entrega + stockline ID), не reusable
+
+**Анти-правило:** не засорять `Vendor Product Code` нестрогим `Codigo de fabricacion` — иначе ложные matches и каталог раздувается.
+
+Исторически Serviflor backfill 12/14 events шёл **внешним ChatGPT-каналом** (не через Make.com бот). Промт-снимок v9.1 — [add/09_serviflor_chatgpt_prompt_v9.1.txt](add/09_serviflor_chatgpt_prompt_v9.1.txt). После окончания «бухгалтер-era» **этот pipeline закрыт**, повторно не используется. Дальнейшая работа — см. § 13 «Новый workflow без бухгалтера».
 
 ### 12.2. Pipeline event-by-event
 **Вход** (одна папка на event):
@@ -268,6 +279,16 @@ draft (Holded import / bot Route 1)
 - **#14 — 2026-05-05, factura 3031** (2362.28€ base)
 
 Решение для 2 заблокированных — см. [§ 11.8](#11-открытое). Варианты: (a) workbook постфактум от бухгалтера; (b) production import без split (один primary warehouse по факту разгрузки, без transfer-перебросов, recount = paper qty); (c) оставить в Holded read-only, не догонять — оплата уже прошла банком. Owner-выбор до cutover.
+
+### 12.7. Temporal warehouse как garbage bucket (осознанная фича)
+
+`stock.warehouse` id=5 «Temporal» (code=TMP) держится активным как **сборник проблемных кейсов**:
+- Orphaned `stock.move` с `picking_id=False` от Verdnatura retro-fix'ов (когда Odoo не даёт менять uom/qty на done move — старая move обнуляется и создаётся новая с правильным uom; старая остаётся orphaned). На 2026-05-08 — 19 таких moves, все `location_dest_id=TMP/Stock`, продукты с префиксом 🚫.
+- Будущие cleanup-кейсы которые временно нужно куда-то «убрать» до разбора.
+
+**Не архивировать.** К концу дня условно должно быть пусто, но если что-то там лежит — это видимый сигнал «есть незакрытый кейс».
+
+**Anti-pattern:** не использовать TMP как способ обойти proper workflow. Это последний resort, не стандартный канал.
 
 ### 12.5. Operator workflow (один event)
 1. Подготовить папку event (5 поддиректорий: online_order/, processed_todas/, factura/, bookkeeper_workbook/, holded_compras_evidence/).

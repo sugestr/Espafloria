@@ -1,0 +1,32 @@
+{
+  "status": "READY_NO_BOOKKEEPER",
+  "date": "2026-05-05",
+  "key": "15000475",
+  "online": [
+    "Order_15000475-2.xlsx"
+  ],
+  "processed": [
+    "Order_14995845-2.xlsx"
+  ],
+  "facturas": [
+    "Factura3031_2026.pdf"
+  ],
+  "workbook": null,
+  "note": "Serviflor layers match; bookkeeper workbook missing. Needs operational allocation before import.",
+  "folder_name": "2026-05-05__online_15000475__READY_NO_BOOKKEEPER",
+  "copied": {
+    "online": [
+      "Order_15000475-2.xlsx"
+    ],
+    "processed": [
+      "Order_14995845-2.xlsx"
+    ],
+    "facturas": [
+      "Factura3031_2026.pdf"
+    ],
+    "workbook": []
+  },
+  "missing": [
+    "workbook_missing"
+  ]
+}

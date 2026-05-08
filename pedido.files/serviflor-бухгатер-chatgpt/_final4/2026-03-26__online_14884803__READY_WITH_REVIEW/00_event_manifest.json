@@ -1,0 +1,28 @@
+{
+  "status": "READY_WITH_REVIEW",
+  "date": "2026-03-26",
+  "key": "14884803",
+  "online": [
+    "Order_14884803-2.xlsx"
+  ],
+  "processed": [],
+  "facturas": [
+    "Factura1797_2026.pdf"
+  ],
+  "workbook": "2026-03-30 - Vilassar.xlsx",
+  "note": "Near match; factura base higher by 7.50, likely Alstroemeria qty change. Already typical package.",
+  "folder_name": "2026-03-26__online_14884803__READY_WITH_REVIEW",
+  "copied": {
+    "online": [
+      "Order_14884803-2.xlsx"
+    ],
+    "processed": [],
+    "facturas": [
+      "Factura1797_2026.pdf"
+    ],
+    "workbook": [
+      "2026-03-30 - Vilassar.xlsx"
+    ]
+  },
+  "missing": []
+}

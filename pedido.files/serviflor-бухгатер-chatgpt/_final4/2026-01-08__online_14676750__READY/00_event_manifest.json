@@ -1,0 +1,28 @@
+{
+  "status": "READY",
+  "date": "2026-01-08",
+  "key": "14676750",
+  "online": [
+    "Order_14676750.xlsx"
+  ],
+  "processed": [],
+  "facturas": [
+    "000128 SERVIFLOR VILASSAR SL.pdf"
+  ],
+  "workbook": "2026-01-13 - Vilassar Hecho.xlsx",
+  "note": "Online base matches factura base.",
+  "folder_name": "2026-01-08__online_14676750__READY",
+  "copied": {
+    "online": [
+      "Order_14676750.xlsx"
+    ],
+    "processed": [],
+    "facturas": [
+      "2026-01-13/000128 SERVIFLOR VILASSAR SL.pdf"
+    ],
+    "workbook": [
+      "2026-01-13 - Vilassar Hecho.xlsx"
+    ]
+  },
+  "missing": []
+}
