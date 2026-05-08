@@ -1,4 +1,4 @@
-<!-- v: 4 | updated: 2026-05-03T00:30Z -->
+<!-- v: 5 | updated: 2026-05-08T16:00Z -->
 # 00. Master Index — Espafloria Odoo
 
 **Owner:** Andriy
@@ -124,6 +124,7 @@ kb/
 | `add/09_reception_audit_v14_prompt.md` | Re-audit prompt для v14 (post-fix) |
 | `add/09_reception_INSTR_attach_pdf.md` | Recipe: bulk attach paper PDF к Verdnatura pedido (post-reset) |
 | `add/09_reception_INSTR_test_run.md` | Recipe: single-pedido test run алгоритма (test версии + side-by-side diff) |
+| `add/09_serviflor_chatgpt_prompt_v9.1.txt` | ChatGPT external prompt v9.1-lite для одиночных Serviflor events: вход = supplier files + bookkeeper workbook + Compras evidence → выход = PO/transfer/supplierinfo XLSX готовые к Odoo import. Учим pricelist через композитный Supplier Identity Key (у Serviflor нет стабильного `codigo`). v9.1 vs v8.5: two-step PO price enforcement (1_purchase_order + 1b_purchase_order_line_price_fix), lightweight 4_import_control_summary, supplier enrichment как REQUIRED-IF-EXISTS metadata. |
 
 ---
 
@@ -177,7 +178,7 @@ kb/
 | Google Sheets: products | [link](https://docs.google.com/spreadsheets/d/1ep4WA5ciu2R1-mVx9Ish2dGH1s9kdjVECGkkGBCsBaE) | ETL справочник Holded→Odoo |
 | Google Sheets: albaran | [link](https://docs.google.com/spreadsheets/d/1apNcpf7-44OGQVb39wNfZBU7INv3iyTGEFsZVOvH_58) | ETL для albaran→pedido |
 | Регламент сотрудников | Google Doc (legacy, Holded-based) | Ждёт переработки под Odoo |
-| Paper PDF / data | `../pedido.files/reception_paper/`, `../pedido.files/verdnatura/` | На уровне выше KB (data, не KB) |
+| Paper PDF / data | `../pedido.files/reception_paper/`, `../pedido.files/verdnatura/`, `../pedido.files/serviflor/` | На уровне выше KB (data, не KB). `serviflor/` — Compras Exportar items 2025+2026, Product Variant export, Supplier Pricelist export, odoo-pedido CSV, selection analysis xlsx, event index xlsx — справочники для ChatGPT-промта v9.1. |
 
 ---
 

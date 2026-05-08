@@ -1,7 +1,7 @@
-<!-- v: 3 | updated: 2026-05-03T00:30Z -->
+<!-- v: 4 | updated: 2026-05-08T16:00Z -->
 # 09. Pedido — работа с purchase orders
 
-**Что в файле:** домен `purchase.order` (закупки у поставщиков): источники, жизненный цикл, reconciliation paper PDF ↔ Odoo, action 1217 finalizer, supplierinfo learning, partner_id Verdnatura. Reception_algorithm — главный artefact в `add/09_reception_algorithm.md`.
+**Что в файле:** домен `purchase.order` (закупки у поставщиков): источники, жизненный цикл, reconciliation paper PDF ↔ Odoo, action 1217 finalizer, supplierinfo learning, partner_id Verdnatura, Serviflor ChatGPT pipeline (§ 12). Reception_algorithm — главный artefact в `add/09_reception_algorithm.md`.
 
 **Status:** 🟡 READY — 188 pedido draft в системе после Holded re-import (2026-05-02), все state=draft, supplierinfo=0. Ждут прогона через reception_algorithm + action 1217.
 
@@ -36,6 +36,9 @@ Bulk import из Holded (старая ERP). После reset 2026-05-02 — **18
 
 ### 2.3. Manual create
 Через Odoo UI — для разовых закупок мелких поставщиков.
+
+### 2.4. ChatGPT external prompt — Serviflor pipeline
+Отдельный backfill-канал для Serviflor исторических events: оператор гоняет ChatGPT 5.5 Thinking по промту v9.1-lite, на вход — папка одного event (online order + Todas + factura PDF + bookkeeper workbook + Holded compras evidence), на выход — flat ZIP с `1_purchase_order_*.xlsx` (+ опц `2/3_internal_transfer_*.xlsx` если есть real movement) + `5_supplierinfo_learning_import.xlsx` + control report + русский Odoo chatter text. См. § 12 ниже.
 
 ---
 
@@ -194,6 +197,90 @@ draft (Holded import / bot Route 1)
 | 11.5 | OLD_ SKU awareness в bot для исторических pedido | 🔴 |
 | 11.6 | Multi-warehouse split одного albarán | 🔴 (custom) |
 | 11.7 | **Post-bulk vendor price audit** (после full bulk Verdnatura ~167 pedido) — single subagent run: пройти все templates с >1 supplierinfo Verdnatura, применить scaled threshold (avg<3€ → ratio≤2.5+abs≤1.5; <8€ → 1.7+3; <20€ → 1.4+5; >20€ → 1.25+10), flag suspicious через `mail.activity` на template + `@Andriy` mention. Owner идёт по полкам / открывает activities → решает split / keep на каждой. Это catch-up на bookkeeper miss-matches которые subagent не отловил. | 🔴 (after bulk done) |
+| 11.8 | Serviflor 2 заблокированных events (28 апр factura 2874 + credit note 2971; 5 мая factura 3031) — нет workbook бухгалтера. Решение до cutover: либо бухгалтер делает workbook, либо production без split (один primary warehouse, recount by paper только), либо оставить в Holded read-only. | 🟡 (см. § 12.4) |
+
+---
+
+## 12. Serviflor pipeline (ChatGPT v9.1-lite)
+
+### 12.1. Зачем отдельный pipeline
+У Serviflor **нет стабильного supplier `codigo`** на товарах — каждый раз новые SKU. Make.com бот учит supplierinfo по `(partner, codigo)` → у Serviflor этот ключ не стабильный. Решение: учим pricelist через **композитный Supplier Identity Key** (ART + COLOR + ORIGIN + GROWER + POT + HEIGHT + QUALITY + PIECES_UNIT + UNITS_PER_PACK + PACK_MODE) — атрибуты заказа становятся идентичностью.
+
+Поэтому Serviflor backfill идёт **внешним ChatGPT-каналом**, не через Make.com бот. Промт — [add/09_serviflor_chatgpt_prompt_v9.1.txt](add/09_serviflor_chatgpt_prompt_v9.1.txt).
+
+### 12.2. Pipeline event-by-event
+**Вход** (одна папка на event):
+- Serviflor online order XLSX (placed-order evidence)
+- Serviflor Todas XLSX (опц., processing/fulfilment evidence)
+- Factura PDF + опц. credit note (commercial payable truth)
+- Bookkeeper workbook XLSX (SKU-mapping + bought packs + units per pack + actual recount + Plaza/Gloria/Blau split + primary warehouse evidence)
+- Holded Compras evidence XLSX (опц., accepted/SKU evidence)
+
+**Reference data** (одни и те же на все events) — `pedido.files/serviflor/`:
+- `Compras Exportar items-2025.xlsx` + `-2026.xlsx` — Holded Compras export
+- `Product Variant (product.product)-2.xlsx` — Odoo product.product catalog
+- `Supplier Pricelist (product.supplierinfo)-4.xlsx` — known supplierinfo
+- `odoo-pedido - serviflor.csv` — already-imported pedido список (anti-duplicate guard)
+- `serviflor_compras_2025_selection_analysis.xlsx` + `-2026` — выборки compras
+- `serviflor_event_index.xlsx` — master index 14 events со статусом
+
+**Выход** (flat ZIP, прямо в attachment Pedido):
+- `1_purchase_order_<warehouse>_import.xlsx` — clean PO import
+- `1b_purchase_order_line_price_fix.xlsx` — second pass price enforcement (v9.1 hardening)
+- `2_internal_transfer_*_to_*.xlsx` — только если real movement primary→другие магазины
+- `3_internal_transfer_*_to_*.xlsx` — то же
+- `4_import_control_summary.xlsx` — lightweight control report
+- `5_supplierinfo_learning_import.xlsx` — learned supplierinfo с composite Identity Key
+- русский Odoo chatter text для копи-пасты в pedido log
+
+### 12.3. Жёсткие гейты v9.1
+- Factura PDF = payable truth, workbook не override.
+- `Order Lines/Unit Price` → `order_line/price_unit` (hard blocker если mapping иной).
+- `/Database ID` колонки только numeric (Tallo=1, Paquete=31; tax 68=10%G, 7=21%G).
+- Dynamic primary receipt warehouse — НЕ всегда Plaza, выводится из workbook/Compras evidence.
+- Pack vs Unit per-line classification без silent guess (uncertain → 🟠 review).
+- Excel PASS ≠ Odoo PASS — после import обязательная visual проверка Odoo line Amount = factura subtotal.
+- Two-step price enforcement: после import основной PO применяется 1b file для перезаписи цен (защита от Odoo onchange recalculation).
+
+### 12.4. Status backlog (на 2026-05-08)
+
+**14 events identified** (период Dec 2025 → 5 мая 2026). См. `pedido.files/serviflor/serviflor_event_index.xlsx`.
+
+**Импортировано: 12/14** ([cross-check Odoo](https://espafloriasl.odoo.com/odoo/purchase) — все 12 в `state=purchase`, 13 internal transfers Done):
+
+| # | Event | Factura | Pedido ID | Odoo amount_untaxed | Paper base | Match |
+|---|---|---|---|---|---|---|
+| 1 | 2025-12-11 | 7630 | 48708 | 306.22 | 306.22 | ✅ |
+| 2 | 2025-12-18 | 7893 | 48719 | 553.42 | 553.42 | ✅ |
+| 3 | 2026-01-06 | 81+113 | 48874 | 2142.73 | 2165.73 | ⚠ Δ 23€ partial fulfilment |
+| 4 | 2026-01-08 | 128 | 48888 | 748.90 | 748.90 | ✅ |
+| 5 | 2026-01-15 | 238 | 48908 | 993.65 | 993.65 | ✅ |
+| 6 | 2026-01-22 | 358 | 48937 | 1858.64 | 1858.64 | ✅ |
+| 7 | 2026-01-28 | 494 | 48957 | 782.54 | 782.54 | ✅ |
+| 8 | 2026-02-26 | 1137 | 48979 | 1675.94 | 1675.94 | ✅ |
+| 9 | 2026-03-10 | 1369 | 49008 | 1643.31 | 1643.31 | ✅ |
+| 10 | 2026-03-12 | 1461 | 49023 | 886.32 | 886.32 | ✅ |
+| 11 | 2026-03-26 | 1797 | 48628 | 1905.35 | 1905.35 | ✅ |
+| 12 | 2026-04-07 | 2057 | 49040 | 1065.20 | 1065.20 | ✅ |
+
+**Заблокировано: 2/14** (нет workbook бухгалтера):
+- **#13 — 2026-04-28, factura 2874 + credit note 2971** (1838.07€ base / -117€ correction)
+- **#14 — 2026-05-05, factura 3031** (2362.28€ base)
+
+Решение для 2 заблокированных — см. [§ 11.8](#11-открытое). Варианты: (a) workbook постфактум от бухгалтера; (b) production import без split (один primary warehouse по факту разгрузки, без transfer-перебросов, recount = paper qty); (c) оставить в Holded read-only, не догонять — оплата уже прошла банком. Owner-выбор до cutover.
+
+### 12.5. Operator workflow (один event)
+1. Подготовить папку event (5 поддиректорий: online_order/, processed_todas/, factura/, bookkeeper_workbook/, holded_compras_evidence/).
+2. ChatGPT 5.5 Thinking → загрузить промт v9.1 + reference data + папку event.
+3. Получить ZIP — открыть `4_import_control_summary.xlsx` + русский chatter text.
+4. Если 🔴 blockers — стоп, разбираться. Если 🟠 reviews — owner-decision.
+5. Если 🟢/READY — Odoo Settings → Import → загрузить `1_purchase_order_*.xlsx`.
+6. Сразу следом — `1b_purchase_order_line_price_fix.xlsx` (перезаписать цены).
+7. Visually verify: Odoo line Amount = factura line subtotal на каждой payable строке.
+8. Если есть transfers — загрузить `2_*` и `3_*` (Inventory → Operations → Transfers import).
+9. Загрузить `5_supplierinfo_learning_import.xlsx` (Purchase → Vendor Pricelists import).
+10. На созданном Pedido в chatter — paste русский summary + attach factura PDF + workbook + ZIP.
+11. Подтвердить PO (`button_confirm`), validate picking. По умолчанию это делается в pedido вручную, потому что Serviflor backfill идёт без `x_studio_claude_finalize=True` (это для Verdnatura reception_algorithm).
 
 ---
 
