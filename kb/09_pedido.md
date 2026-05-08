@@ -1,4 +1,4 @@
-<!-- v: 5 | updated: 2026-05-08T17:00Z -->
+<!-- v: 6 | updated: 2026-05-08T22:00Z -->
 # 09. Pedido — работа с purchase orders
 
 **Что в файле:** домен `purchase.order` (закупки у поставщиков): источники, жизненный цикл, reconciliation paper PDF ↔ Odoo, action 1217 finalizer, supplierinfo learning, partner_id Verdnatura, Serviflor ChatGPT pipeline (§ 12). Reception_algorithm — главный artefact в `add/09_reception_algorithm.md`.
@@ -291,6 +291,9 @@ draft (Holded import / bot Route 1)
 **Anti-pattern:** не использовать TMP как способ обойти proper workflow. Это последний resort, не стандартный канал.
 
 ### 12.5. Operator workflow (один event)
+
+[Архивный режим — не повторяется. Текущий workflow — § 13.]
+
 1. Подготовить папку event (5 поддиректорий: online_order/, processed_todas/, factura/, bookkeeper_workbook/, holded_compras_evidence/).
 2. ChatGPT 5.5 Thinking → загрузить промт v9.1 + reference data + папку event.
 3. Получить ZIP — открыть `4_import_control_summary.xlsx` + русский chatter text.
@@ -302,6 +305,214 @@ draft (Holded import / bot Route 1)
 9. Загрузить `5_supplierinfo_learning_import.xlsx` (Purchase → Vendor Pricelists import).
 10. На созданном Pedido в chatter — paste русский summary + attach factura PDF + workbook + ZIP.
 11. Подтвердить PO (`button_confirm`), validate picking. По умолчанию это делается в pedido вручную, потому что Serviflor backfill идёт без `x_studio_claude_finalize=True` (это для Verdnatura reception_algorithm).
+
+---
+
+## 13. Новый workflow Mode B — pedido recognition без бухгалтера
+
+**Status:** 🟡 в проектировании на 2026-05-08. Pilot на event #13 (Serviflor 28 апр factura 2874) — pedido P14636, draft state, ждёт review логиста и confirm. Полная Make.com бот реализация — отдельная инициатива (см. § 13.9 Roadmap).
+
+### 13.1. Контракт workflow
+
+**Вход** (любой из вариантов):
+- Verdnatura: paper PDF (albarán) + опц. factura PDF
+- Serviflor: factura PDF + online order XLSX + опц. Todas XLSX (split files)
+- Любой поставщик: factura PDF минимум
+
+**Выход** — `purchase.order` в `state=draft` со всеми lines pre-filled, готовый к review логистом:
+- Каждая factura-line → `purchase.order.line`
+- `product_id` = best-guess карта Odoo (4-уровневый matching — § 13.3)
+- Studio metadata fields populated (см. § 13.6)
+- `x_studio_match_confidence` per line (confident/probable/candidates/create_new) — цвет статуса
+- `x_studio_alternative_cards` — список кандидатов для cycling
+- `x_studio_supplier_photo_url` — URL фото поставщика для визуальной проверки
+- `x_studio_item_comment` — reasoning текст с переносами строк (см. § 13.8 формат)
+- Логист открывает pedido → review через Alt/New кнопки + photo pair → confirm.
+
+### 13.2. Стадии распознавания
+
+1. **Parse supplier files**: text extraction из PDF (если text-PDF) или OCR (если image PDF). XLSX через openpyxl. Photo URLs из hyperlinks в Todas xlsx.
+2. **Build composite identity** для каждой factura-line — composite key formula в § 13.3.
+3. **4-tier matching** — § 13.3.
+4. **Score → confidence**:
+   - L1 hit (existing supplierinfo с identity key match) → `confident`
+   - L2 hit (active 2026 pool, semantic match high score) → `probable` или `confident`
+   - L2/L3 multiple competing matches → `candidates` + populate `alternative_cards`
+   - No match anywhere → `create_new`
+5. **Photo URL construction** — § 13.4
+6. **Build factura_lot_code** для trace: `Factura: NNNN/YYYY row N | Entrega: ... | Online: ... row N | Stockline: ...`
+7. **Generate item_comment** с переносами строк (§ 13.8)
+8. **Create pedido in Odoo** — via MCP create_record × N lines (или import xlsx если pipeline через бот)
+
+### 13.3. Identity matching algorithm
+
+**Composite key format** (per supplier prefix):
+```
+SV|ART:<NORMALIZED_NAME>|COLOR:<c>|ORIGIN:<co>|GROWER:<g>|HEIGHT:<h>|POT:<p>|PIECES_UNIT:<pu>|UNITS_PER_PACK:<up>|PACK_MODE:<PACK|UNIT>|ATTR:<...>
+```
+
+VN| для Verdnatura, SV| для Serviflor. Хранится в `product.supplierinfo.x_studio_supplier_identity_key`.
+
+**4-уровневый matching pyramid** (по убыванию надёжности):
+
+**L1 — Learned identity:**
+- Search `product.supplierinfo` где `partner_id=vendor` AND `x_studio_supplier_identity_key` совпадает (exact или fuzzy с small edit distance)
+- Hit → берём `product_id` оттуда. Confidence = `confident`.
+
+**L2 — Active 2026 pool:**
+- Pool = unique `product.product` появлявшиеся в `purchase.order.line` за 2026 год (любой поставщик)
+- Score formula: ART exact match=100, word overlap×5+50, 1-word overlap=20
+- Bonus: color match +10, height ±5cm match +5, origin match +5
+- Top score >= 60 → confident. >= 30 → probable. < 30 → candidates с top 2-3.
+
+**L3 — Wider quarantine search:**
+- Если L2 не дал → расширяем до всего `categ_id child_of 207 (Карантин Holded)` + `child_of 287 (Flores Cortadas)`
+- Тот же scoring но threshold 30 → candidates всегда.
+
+**L4 — No match → `create_new`:**
+- Не нашли вообще → mark `x_studio_match_confidence='create_new'` + `x_studio_alternative_cards=[product_id_default_placeholder]`
+
+**Anti-rules:**
+- НЕ матчить по supplier `codigo` напрямую (§ 12.1 — нестрогий)
+- НЕ overwrite ручную правку логиста (если он уже выбрал — не пересчитывать)
+- При сомнениях → `candidates` лучше чем wrong `confident`
+
+### 13.4. Photo URL patterns (для supplier_photo_url field)
+
+**Serviflor** (через FloraPlaza CDN):
+- Generic by VBN: `https://img.floraplaza.nl/?f=ART_fotos%5CVBN%5Cvbn{VBN}.jpg`
+- Specific lot photo (если supplier дал в Todas): `https://img.floraplaza.nl/?f=LIVE_fotos%5C0x{HASH40}.jpg`
+- **Source extraction**: hyperlink из Todas XLSX колонки `Photo` (текст ячейки = «Photo», hyperlink target = реальный URL — используй openpyxl `cell.hyperlink.target`)
+- Fallback: если Todas нет — конструировать generic pattern по VBN online order
+
+**Verdnatura**:
+- Pattern: `https://cdn.verdnatura.es/image/catalog/1600x900/{default_code}`
+- Source: `default_code` (SKU) товара в Odoo карте
+
+**Display**:
+- `x_studio_supplier_photo_url` — Char field, raw URL
+- `x_studio_supplier_photo_html` — Html computed field, оборачивает URL в `<img max-width:100% max-height:128px object-fit:contain>` для inline preview в tree row
+
+### 13.5. Logist review UI в pedido form
+
+Tab «Products» в pedido form — `purchase.order.line` tree view. Customizations в `ir.ui.view id=4467`:
+
+**Колонки (слева направо)**:
+
+| # | Column | Покажет | Когда видно |
+|---|---|---|---|
+| 1 | Product | product_id (default карта от агента) | always |
+| 2 | Our photo | image_128 from product card | always |
+| 3 | New + (red `btn-danger`) | кнопка create-from-supplier | only `confidence='create_new'` |
+| 4 | New + (grey `btn-secondary`) | кнопка create (с confirm dialog) | when `confidence != 'create_new'` |
+| 5 | Alt → (yellow `btn-warning`) | кнопка cycle через alternatives | when `pick_position != ''` (alternatives > 1) |
+| 6 | Alt | "1/2", "2/2" — позиция в cycle | when alternatives > 1 |
+| 7 | URL | supplier_photo_url (clickable) | always |
+| 8 | Supplier photo | inline image от поставщика (computed HTML) | always |
+| 9 | Comment | item_comment_text (computed text mirror, multiline word-wrap) | always |
+| 10 | Match badge | confidence (color-coded: green/yellow/red/blue) | optional=hide (toggle) |
+| 11 | Alternatives tags | many2many tags список кандидатов | optional=hide (toggle) |
+
+**Логист actions**:
+
+- **Photo pair** (Our photo + Supplier photo) — визуальная сверка «правильно ли заматчили». Если визуально совпадает → confidence ОК.
+- **Alt → click** — server action 1236 cycles `product_id` через `x_studio_alternative_cards` без изменения qty/price (server-side write минует product_id onchange). Counter `Alt` обновляется.
+- **New + click (grey)** — confirm dialog «Нужна ли действительно новая карта? Попробуй сначала Alt». Если ОК → server action 1239 (placeholder сейчас, Step 3 TODO). Защита от случайного создания дубликатов.
+- **New + click (red)** — то же действие, но цвет красный сигнализирует «агент рекомендует новую карту, alternatives нет/не подходят».
+
+### 13.6. Studio fields catalog (созданные для Mode B)
+
+На `purchase.order.line` добавлены 2026-05-08:
+
+| Field | Type | Store | Purpose |
+|---|---|---|---|
+| `x_studio_match_confidence` | Selection | True | confident / probable / candidates / create_new |
+| `x_studio_alternative_cards` | M2M → product.product | True | Список опций включая default |
+| `x_studio_pick_position` | Char (computed) | False | "1/2" "2/2" — index в alternatives, '' для n≤1 |
+| `x_studio_pick_choice` | M2O → product.product | True | Legacy dropdown альтернатива (column hidden, automation 16 деактивирована) |
+| `x_studio_supplier_photo_html` | Html (computed) | False | Wraps URL в `<img>` для inline preview |
+| `x_studio_our_photo` | Binary (related) | False | Mirror `product_id.image_128` |
+| `x_studio_item_comment_text` | Text (computed) | False | Multiline mirror char `item_comment` для word-wrap отображения |
+
+Pre-existing (от ChatGPT v9.1 промта supervisor'а):
+- `x_studio_supplier_product_name` (char)
+- `x_studio_supplier_sku` (char)
+- `x_studio_supplier_lot_code` (char)
+- `x_studio_supplier_photo_url` (char)
+- `x_studio_item_comment` (char) — основной writable, формат § 13.8
+- `x_studio_expected_qty` (float)
+- `x_studio_operator_hit` (char)
+
+Identity key field — на `product.supplierinfo`:
+- `x_studio_supplier_identity_key` (char) — composite key formula, см. § 13.3
+
+### 13.7. Server actions
+
+| ID | Name | Trigger | Purpose |
+|---|---|---|---|
+| 1236 | Cycle to next match | tree button on line | rotates `product_id` через `alternative_cards`. **Не** меняет confidence. **Не** триггерит product_id onchange (preserves qty/price/taxes/uom). |
+| 1237 | Verify match (mark confident) | unused | обнавливает `match_confidence='confident'`. Не используется в текущей UI. |
+| 1239 | Create card from supplier | tree button on line | **Placeholder** для Step 3. Сейчас постит chatter note. TODO полная реализация: fetch photo URL → image_1920, создать template+variant в карантине, supplierinfo с identity key, привязать к pedido.line. |
+| 1240 | Migrate item_comment char→text | unused | Не понадобилась — финальное решение через computed text mirror. |
+| 1234 | Retro-fix Serviflor TMP/INT | executed 2026-05-08 | One-shot, выполнен. |
+
+`base.automation 16`: «Pick choice → swap product_id» — деактивирован (заменён cycle button).
+
+### 13.8. item_comment formatting rule
+
+Бот / агент / любой источник item_comment должен писать **с `\n\n` (двойной перенос) между смысловыми блоками**:
+
+```
+🟢/🟡/🟠/🔴 STATUS: краткий summary одной строкой
+
+Reasoning:
+- bullet 1
+- bullet 2
+
+Альтернатива: ...
+
+Logist decide.
+```
+
+**НЕ** писать всё одной строкой. Comment column в tree рендерится через `widget="text"` с word-wrap — multiline воспринимается читаемо.
+
+Цветовые маркеры в начале:
+- 🟢 OK = confident match, action не нужен
+- 🟡 OK = probable, визуальная проверка по photo
+- 🟠 REVIEW = candidates, цикли через Alt
+- 🔴 (или 🚧) = create_new или blocker
+
+### 13.9. Roadmap — что построить далее (после #13 пилота)
+
+**Step 3 — Create card from supplier action (полная реализация)** 🔴
+- Fetch photo по supplier_photo_url → product.image_1920 (через `requests` или urllib)
+- Create `product.template` + `product.product` в категории `⛔ Карантин Holded` (id=207, потом → новый clean catalog hierarchy когда будет создана)
+- Apply `supplier_taxes_id` (10% R для цветов/растений, 21% G для аксессуаров)
+- `default_code` = из VBN если стабильный, иначе sequence `SV-NEW-<YYYYMMDD>-N`
+- Create `product.supplierinfo` с composite identity key
+- Assign new product to current pedido.line (`product_id`)
+- Set `match_confidence='confident'`
+- Open new card в form view для логиста чтобы он подкорректировал детали
+- Поведение «if doubts — undo» — placeholder с подтверждением + chatter лог.
+
+**Step 4 — Make.com бот integration** 🔴
+- Route 1 (current OCR + reconciliation) дополнить:
+  - Для Serviflor: parser xlsx (online + Todas) + extract photo URLs из hyperlinks
+  - Для всех: composite identity key construction
+  - 4-tier matching algorithm (адаптировано из ChatGPT v9.1 + § 13.3)
+  - Output: pedido draft state с populated Studio fields
+- Route 2 (existing line-log) — оставить как есть для accept/recount после приёмки
+
+**Step 5 — Inline form view** 🟡
+- Click на pedido.line → modal с large photos, dropdown alternatives, prominent confidence, full comment
+- Нужен если tree view UX окажется ограниченным на production scale (>50 lines per pedido)
+- Сейчас не критичен — tree-list работает приемлемо
+
+**Step 6 — Catalog hierarchy** 🔴
+- См. § 58 в KB обсуждениях. Нужна перед запуском POS.
+- Чистая иерархия категорий (Flores Cortadas / Plantas / Accessories с подкатегориями)
+- Migration script для top-N карт из карантина
+- После → Step 3 «Create from supplier» использует новую иерархию для категоризации
 
 ---
 
