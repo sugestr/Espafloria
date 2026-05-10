@@ -1,4 +1,4 @@
-<!-- v: 1 | updated: 2026-05-10T16:00Z -->
+<!-- v: 2 | updated: 2026-05-10T18:30Z -->
 # План миграции каталога Espafloria — снимок 2026-05-10
 
 Snapshot структуры переезда: цели, принципы, карта блоков A1–A14, статус, принятые решения, парк-открытые. Точка возврата для следующей сессии.
@@ -31,8 +31,8 @@ Snapshot структуры переезда: цели, принципы, кар
 
 | # | Блок | Смысл одной фразой | Статус |
 |---|---|---|---|
-| **A1** | Audit current state | Снять снимок «что есть, чего не хватает», прежде чем что-то проектировать | 🟡 в работе |
-| **A3** | Attribute extraction | Из supplierinfo (codigo Verdnatura + Supplier Identity Key Serviflor) пересобрать структурированные атрибуты на каждой карте | ⬜ TODO |
+| **A1** | Audit current state | Снять снимок «что есть, чего не хватает», прежде чем что-то проектировать | 🟢 закрыт 2026-05-10 |
+| **A3** | Attribute extraction | Из supplierinfo (codigo Verdnatura + Supplier Identity Key Serviflor) пересобрать структурированные атрибуты на каждой карте | ⬜ TODO (next) |
 | **A4** | Design tree | Нарисовать новое дерево учётной категории + POS-вкладок, опираясь на A3 | ⬜ TODO |
 | **A5** | Pilot multivariant | Один реальный multivariant (например Rosa Red Naomi 40/50/60) end-to-end через v2.2, проверка процедуры | ⬜ TODO |
 | **A6** | Bulk skeleton + migrate | Создать пустые target template'ы, прогнать миграцию пачками с проверкой каждой пачки | ⬜ TODO |
@@ -40,13 +40,13 @@ Snapshot структуры переезда: цели, принципы, кар
 | **A8** | POS categories setup | Зеркало учётного дерева + тематические псевдо-вкладки. Фотогалерея supplier+receipt | ⬜ TODO |
 | **A9** | Price review + VAT switch | Ревью цен против Holded. **До этого** — переключение системы на «работа с НДС внутри» с risk explainer | ⬜ TODO |
 | **A10** | Print-queue (`needs_print` flow) | Автоматическая задача магазину при смене цены / новой карте, отметка о выполнении | ⬜ TODO |
-| **A11** | April reception на новый каталог | Reception_algorithm с приоритетом нового каталога. Прогон апрельских pedido → остатки | ⬜ TODO |
+| **A11** | April reception на новый каталог | **64 апрельских albaran** (factura A12621592 от 30 Apr) → бот Mode B → флористы пересчитывают → первый stock-приход на новый каталог | ⬜ TODO |
 | **A12** | POS open + verify stock | Открытие касс + Cycle Count правило при первой продаже для верификации остатка | ⬜ TODO |
-| **A2** *(перенесён в конец)* | Holded albaran gap fill | Если sanity-check сумм в A1 покажет расхождение — sub-agent дотащит пропущенные albaranes сразу на новый каталог | ⬜ TODO (условный) |
+| **A2** *(перенесён в конец)* | Codigo-backfill 22 albaran (Jan+Feb+Mar) | **22 «потерянных бухгалтером» albaran** (5 Jan + 3 Feb + 14 Mar). Sub-agent дотягивает на готовый новый каталог через codigo-match supplierinfo. Учётный backfill без stock-движений. | ⬜ TODO |
 | **A13** | Hard goods 1:1 track | Твёрдый товар: 1:1 миграция, остатки из Holded как константы, без реструктуризации | ⬜ TODO |
 | **A14** | Migration log | Финальный CSV/MD журнал «старая ↔ новая» для аудита и для бота OLD_ awareness | ⬜ TODO |
 
-**A2 перенесён** с позиции #2 в конец. Причина: фактуры Verdnatura в Holded compras = summary без детализации, нет смысла «дотягивать факты». Detail-позиции живут в albaranes, и **все товарные albaranes Verdnatura уже импортированы как 167 pedido в Odoo**. Sanity-check в A1 покажет нужен ли A2 вообще.
+**A2 перепрофилирован** (был «Holded albaran gap fill» — снято после A1 cross-check). Holded ↔ Odoo = идеальное совпадение (Make.com бот не теряет). 86 пропущенных albaran — все на стороне бухгалтера: 22 «исторических» (Jan+Feb+Mar) + 64 «лаговых» апрельских (фактура A12621592 получена 30 Apr, ещё не разнесена в Holded). 22 исторических пойдут в A2 через codigo-backfill, 64 апрельских — в A11 как штатная приёмка. Полные списки albaran — в audit_quarantine.md §7.
 
 ---
 
@@ -151,21 +151,28 @@ Bulk-write на ~880 карт — **в блоке A7** после миграци
 - 1 source 7304 (CRISANTEMO RAMI MIX) с TEST target — source очищен, target template 7836 + variant 7852 удалены.
 - Карантин в pristine state (0 записей с `migration_status=archived`).
 
-### 5.3. Что осталось внутри A1
+### 5.3. A1 закрыт — итоги
 
-A1.19.7.1. **Sanity-check сумм Holded↔Odoo по месяцам** для Verdnatura — закроет вопрос «есть ли пропущенные albaranes». Если сходится ±5% — A2 не нужен. Если расхождение — A2 как conditional блок.
+A1.19.7.1. ✅ **Sanity-check сумм Holded↔Odoo по месяцам** для Verdnatura — выполнен. Январь+февраль норма, март -18.6% gap.
 
-A1.19.7.2. **Sub-agent аудит-проход** по 5 файлам:
-- aggregate stats по карантину (категории, кол-ва, supplierinfo-coverage);
-- классификация 675 «болтающихся» карт root-карантина на «использовалась в 2026 / нет»;
-- sample-сверка 30 карт Odoo↔Holded цен (не нужно — есть полный экспорт Holded, делаю полное сопоставление);
-- список Verdnatura без codigo (3 шт) и Serviflor без identity_key (109 шт) с пометкой «починить в A3».
+A1.19.7.2. ✅ **Sub-agent аудит-проход** по 5 файлам — deliverables собраны.
 
-A1.19.7.3. **Deliverables A1:**
-- `kb/add/05_2026-05-10_audit_quarantine.md` — текстовый снимок (числа, наблюдения, red-flags).
-- `pedido.files/migration/audit_2026-05-10.xlsx` — рабочий лист на 2 листа: «срезка + горшечка + карантин-root» + «твёрдый товар». Колонки готовы для design-pass'а в A4.
+A1.19.7.3. ✅ **Albaran-level cross-check через 4 фактуры PDF + Holded albaran XLSX** — точная картина: 86 missing все на стороне бухгалтера (22 исторических + 64 апрельских lag). Holded↔Odoo = идеальное совпадение (167↔167).
 
-A1.19.7.4. **Презентация summary** в чате после deliverable. Закрытие A1, переход в A3.
+A1.19.7.4. ✅ **A1 deliverables:**
+- `kb/add/05_2026-05-10_audit_quarantine.md` — текстовый снимок 8 секций.
+- `pedido.files/migration/audit_2026-05-10.xlsx` — 2 листа × 30 колонок (1553 + 587 карт).
+- `pedido.files/migration/build_audit.py` — воспроизводимый pipeline.
+- `pedido.files/migration/holded_albaranes_2026-05-10.xlsx` — Holded albaran items для трассируемости.
+- `pedido.files/reception_paper/factura_2026/factura_2026A1xxx_<mon>.pdf` — 4 фактуры Verdnatura за 2026.
+
+A1.19.7.5. **Ключевые числа из аудита:**
+- 2140 карт в карантине (после cleanup 10 archived).
+- 395 (18.5%) использовались в 179 pedido 2026 → скелет нового каталога.
+- 649/675 root-only можно архивировать (не использовались в 2026).
+- 77 MIX-кандидатов (из них ~20 без слова MIX в имени).
+- 1737 orphan-карт (ни SI, ни pedido) — массовый archive в A14.
+- 1919/2140 (89.7%) цен Odoo↔Holded совпали в пределах 5%.
 
 ---
 
