@@ -1,4 +1,4 @@
-<!-- v: 7 | updated: 2026-05-09T00:00Z -->
+<!-- v: 8 | updated: 2026-05-10T00:00Z -->
 # 09. Pedido — работа с purchase orders
 
 **Что в файле:** домен `purchase.order` (закупки у поставщиков): источники, жизненный цикл, reconciliation paper PDF ↔ Odoo, action 1217 finalizer, supplierinfo learning, partner_id Verdnatura, Serviflor ChatGPT pipeline (§ 12). Reception_algorithm — главный artefact в `add/09_reception_algorithm.md`.
@@ -421,31 +421,40 @@ Tab «Products» в pedido form — `purchase.order.line` tree view. Customizati
 - **New + click (red)** — для статуса `create_new`. Без confirm, сразу триггерит 1239.
 - **New + click (red)** — то же действие, но цвет красный сигнализирует «агент рекомендует новую карту, alternatives нет/не подходят».
 
-### 13.6. Studio fields catalog (созданные для Mode B)
+### 13.6. Studio fields catalog
 
-На `purchase.order.line` добавлены 2026-05-08:
+На `purchase.order` (header):
+
+| Field | Type | Store | Default | Purpose |
+|---|---|---|---|---|
+| `x_studio_view_mode` | Selection | True | `'logist'` (`ir.default 34`) | Role-based view mode toggle: `logist` / `bookkeeper`. **Только видимость полей**, не permissions и не данные. См. § 13.12 |
+| `x_studio_claude_finalize` | Boolean | True | False | Trigger checkbox для action 1217 finalize (см. § 6) |
+
+На `purchase.order.line` добавлены 2026-05-08 для Mode B:
 
 | Field | Type | Store | Purpose |
 |---|---|---|---|
-| `x_studio_match_confidence` | Selection | True | confident / probable / candidates / create_new |
-| `x_studio_alternative_cards` | M2M → product.product | True | Список опций включая default |
-| `x_studio_pick_position` | Char (computed) | False | "1/2" "2/2" — index в alternatives, '' для n≤1 |
-| `x_studio_pick_choice` | M2O → product.product | True | Legacy dropdown альтернатива (column hidden, automation 16 деактивирована) |
-| `x_studio_supplier_photo_html` | Html (computed) | False | Wraps URL в `<img>` для inline preview |
-| `x_studio_our_photo` | Binary (related) | False | Mirror `product_id.image_128` |
-| `x_studio_item_comment_text` | Text (computed) | False | Multiline mirror char `item_comment` для word-wrap отображения |
+| `x_studio_match_confidence` | Selection | True | `confident` / `probable` / `candidates` / `create_new`. Источник истины — agent/Make.com bot после matching |
+| `x_studio_alternative_cards` | M2M → product.product | True | **Список кандидатов** по композитному identity key (включая текущий `product_id`). Заполняется agent'ом/ботом при `probable`/`candidates`. Action 1236 (Alt →) циклит через этот список. Удалить = сломать Alt button |
+| `x_studio_pick_position` | Char (computed) | False | "1/2" / "2/2" — индекс текущего product_id в alternative_cards. Пустая строка для `len(alternatives) <= 1`. Используется в `invisible` Alt button |
+| `x_studio_supplier_photo_html` | Html (computed) | False | Wraps `x_studio_supplier_photo_url` в `<img>` для inline preview в tree (widget="html") |
+| `x_studio_our_photo` | Binary (related → `product_id.image_128`) | False | Превью **нашей** карты product_id. Не путать с supplier_photo* |
+| `x_studio_item_comment_text` | Text (computed mirror char `x_studio_item_comment`) | False | Read-only multiline mirror для word-wrap в tree (widget="text"). Источник правды = `x_studio_item_comment` (writable char) |
 
-Pre-existing (от ChatGPT v9.1 промта supervisor'а):
-- `x_studio_supplier_product_name` (char)
-- `x_studio_supplier_sku` (char)
-- `x_studio_supplier_lot_code` (char)
-- `x_studio_supplier_photo_url` (char)
-- `x_studio_item_comment` (char) — основной writable, формат § 13.8
-- `x_studio_expected_qty` (float)
-- `x_studio_operator_hit` (char)
+Pre-existing (от ChatGPT v9.1 промта supervisor'а / Make.com bot output):
+
+| Field | Type | Semantic |
+|---|---|---|
+| `x_studio_supplier_product_name` | Char | Полное человеко-читаемое название как **поставщик** его передал. Пример: «Codiaeum vari Mrs Iceton \| MX \| h=19 \| pot small» |
+| `x_studio_supplier_sku` | Char | SKU/codigo **поставщика** для конкретной line (Verdnatura `default_code`, Serviflor VBN/Artikel) |
+| `x_studio_supplier_lot_code` | Char | **Trace** на конкретный lot/факту/entrega поставщика (например `factura 002874/2026 → entrega 12345 → row N`). Используется для history/dispute, не для matching |
+| `x_studio_supplier_photo_url` | Char | **URL** картинки на CDN поставщика для **этой конкретной line** (не на template-уровне, не наш сайт). Сейчас источники: Serviflor → FloraPlaza CDN (`https://img.floraplaza.nl/?f=ART_fotos%5CVBN%5Cvbn{VBN}.jpg`), Verdnatura → `https://cdn.verdnatura.es/image/catalog/1600x900/{default_code}`. **Не массив, одна ссылка.** Может быть пустым если bot не нашёл photo. Логист использует для визуального match через `x_studio_supplier_photo_html` |
+| `x_studio_item_comment` | Char | **Writable** агентский comment (reasoning + recommendation). Format § 13.8 |
+| `x_studio_expected_qty` | Float | Bookkeeper recount (paper-truth). Sums to total in tree |
+| `x_studio_operator_hit` | Char | Operator hint (например ground truth from Make.com line-log) |
 
 Identity key field — на `product.supplierinfo`:
-- `x_studio_supplier_identity_key` (char) — composite key formula, см. § 13.3
+- `x_studio_supplier_identity_key` (char) — composite key formula `<vendor>|ART:<artikel>|COLOR:<color>|...`, см. § 13.3 + § 13.9.
 
 ### 13.7. Server actions
 
@@ -455,9 +464,15 @@ Identity key field — на `product.supplierinfo`:
 | 1237 | Verify match (mark confident) | unused | обнавливает `match_confidence='confident'`. Не используется в текущей UI. |
 | 1239 | Create card from supplier | tree button on line | **Implemented (Step 3)** — создаёт `product.template` (auto-variant) в категории `⛔ Карантин Holded` (id=207), SKU = next free `8400xxx`, cost=line.price_unit, list_price=cost×3, taxes_id=82 (sales 10% R), supplier_taxes_id=68 (purchase 10% R), Holded Link = supplier_photo_url, supplierinfo с composite identity key, back-link через chatter на pedido + на новой карте, `mail.activity` TODO «Загрузить фото и проверить карту» deadline +7 дней. После create открывает форму карты в modal. **Фото загружается вручную** — auto-fetch URL→image_1920 невозможен на Odoo Online (см. §13.10). |
 | 1240 | Migrate item_comment char→text | unused | Не понадобилась — финальное решение через computed text mirror. |
+| 1242 | Set view: Logist | header button | `record.write({'x_studio_view_mode': 'logist'})`. См. § 13.12 |
+| 1244 | Set view: Bookkeeper | header button | То же для `'bookkeeper'`. См. § 13.12 |
 | 1234 | Retro-fix Serviflor TMP/INT | executed 2026-05-08 | One-shot, выполнен. |
 
-`base.automation 16`: «Pick choice → swap product_id» — деактивирован (заменён cycle button).
+**Удалено 2026-05-09:**
+- Field `x_studio_pick_choice` (M2O legacy, id 27786) — заменён cycle button
+- Server action 1235 «Swap product on pick_choice change» — зависел от удалённого field
+- Server action 1243 «Set view: Buyer» — Buyer mode merged в Logist (см. § 13.12)
+- `base.automation 16` (Pick choice swap) — деактивирована ранее, после удаления field тоже потеряла смысл
 
 ### 13.8. item_comment formatting rule
 
@@ -534,6 +549,12 @@ SV|ART:<artikel>|COLOR:<color>|ORIGIN:<origin_code>|GROWER:<grower>|HEIGHT:<heig
   - Output: pedido draft state с populated Studio fields
 - Route 2 (existing line-log) — оставить как есть для accept/recount после приёмки
 
+**Step 4.5 — Distribution UI inside Odoo** 🔴 (deferred)
+- Сейчас распределение **по магазинам** (Plaza/Gloria/Blau qty per line) делается **вне Odoo** через Flora-xlsx workbook (логист собирает, шаблон в `pedido.files/serviflor-бухгатер-chatgpt/_final4/<event>/Flora_*.xlsx`).
+- Флора-файл = `(VBN, Артикул, Цвет, Высота, Длина, Origin, Фото, Связок, шт./связке, Всего шт., Подсказка, → Plaza, → Gloria, → Blau, Остаток)`. «Остаток=0» = perfect distribution; ненулевой = нераспределено / партия пришла не полностью.
+- Перенос в Odoo требует: 3 Studio Integer fields per line (`x_studio_qty_plaza/gloria/blau`), constraint sum = expected_qty, color на остатке, экспорт в xlsx для floriste-команды (которая распределяет фактически в магазине).
+- **Решение:** оставить external xls workflow до запуска Make.com бота (Step 4). Distribution UI делаем когда уже есть стабильный pedido draft → recognition pipeline.
+
 **Step 5 — Inline form view** 🟡
 - Click на pedido.line → modal с large photos, dropdown alternatives, prominent confidence, full comment
 - Нужен если tree view UX окажется ограниченным на production scale (>50 lines per pedido)
@@ -544,6 +565,95 @@ SV|ART:<artikel>|COLOR:<color>|ORIGIN:<origin_code>|GROWER:<grower>|HEIGHT:<heig
 - Чистая иерархия категорий (Flores Cortadas / Plantas / Accessories с подкатегориями)
 - Migration script для top-N карт из карантина
 - После → Step 3 «Create from supplier» использует новую иерархию для категоризации
+
+### 13.12. View mode toggle (role-based field visibility)
+
+Pedido форма физически проходит **2 роли** последовательно:
+1. **Логист** (= matching + distribution): сматчить продукты, разнести по магазинам через external Flora-xls.
+2. **Бухгалтер**: проверить суммы / налоги / payment terms, провести в учёт.
+
+(Третья роль «Распределитель» merge'нута в Logist — distribution делается тем же человеком сразу после matching, см. Step 4.5 deferred.)
+
+Каждой роли нужна своя «оптика» — без шума от полей другой роли. Реализовано через **Selection field + button toggle + column_invisible expressions**.
+
+#### 13.12.1. Архитектура
+
+| Компонент | ID | Что делает |
+|---|---|---|
+| Selection field `x_studio_view_mode` на purchase.order | 27797 | `'logist'` / `'bookkeeper'`, default `'logist'` (`ir.default 34`) |
+| Server action «Set view: Logist» | 1242 | Header button → `write({'x_studio_view_mode': 'logist'})` |
+| Server action «Set view: Bookkeeper» | 1244 | То же для `'bookkeeper'` |
+| 2 кнопки в header view 4467 | — | Текущий mode = `btn-primary` синий, остальной = `btn-secondary` серый. Click → server action → form reload |
+
+При создании новой pedido автоматически берётся `'logist'` (через `ir.default`).
+
+#### 13.12.2. Какие колонки скрыты в Bookkeeper mode
+
+Через `column_invisible="parent.x_studio_view_mode == 'bookkeeper'"`:
+
+- `x_studio_our_photo` (Our photo)
+- `x_studio_pick_position` (Alt позиция «1/2»)
+- `x_studio_supplier_photo_url` (URL вспомогательный)
+- `x_studio_supplier_photo_html` (Supplier photo рендер)
+- `x_studio_item_comment_text` (Comment computed text mirror)
+- `x_studio_supplier_product_name` (Supplier name)
+- Кнопки: `New +` (red+grey) и `Alt →`
+
+#### 13.12.3. Какие колонки **всегда видны** в обоих modes
+
+Без `optional` атрибута (нельзя скрыть через slider-меню юзером):
+
+- `x_studio_our_photo` в Logist mode (force visible — это критичная часть UX)
+- `x_studio_pick_position`, `x_studio_supplier_photo_html`, `x_studio_item_comment_text`, `x_studio_supplier_product_name` в Logist
+
+Это потому что Odoo column chooser persistence хранится в browser localStorage **общим** для всех mode'ов в рамках одного view. Если поле имеет `optional`, юзер может его un-tick в одном mode'е — и предпочтение применится к другому mode тоже. Чтобы Logist-essential поля всегда были видны в Logist mode независимо от localStorage предпочтений в Bookkeeper'е — `optional` убрано.
+
+#### 13.12.4. Колонки управляемые юзером per-browser
+
+С `optional="show/hide"` (видны в slider-меню, юзер toggles вручную):
+
+- `x_studio_match_confidence` (Match badge) — `optional="hide"`
+- `x_studio_alternative_cards` — `optional="hide"`
+- `product_description_variants` (Custom Description) — `optional="show"`
+- `x_studio_supplier_sku` (Supplier Codigo) — `optional="show"`
+- `x_studio_supplier_lot_code` (Supplier Lot Code) — `optional="show"`
+- `x_studio_item_comment` (raw char) — `optional="hide"`
+- `x_studio_operator_hit` (operator HIT) — `optional="show"`
+- `x_studio_expected_qty` — `optional="show"`
+- `x_studio_margin_x_display` (Margin) — `optional="show"`
+- `x_studio_sales_price_now` — `optional="show"`
+- `x_studio_qty_received_stems` (Real Recv) — `optional="show"`
+- Standard `discount` (Disc.%), `qty_received` — управляются Odoo defaults
+
+#### 13.12.5. Mechanics — column_invisible vs optional vs localStorage
+
+| Mechanism | Где живёт | Per-user? | Per-mode? | Override-able? |
+|---|---|---|---|---|
+| `column_invisible="<expr>"` | Server XML | Нет (на всех) | Да (через expression) | Нет — server-side rule |
+| `optional="show/hide"` | Server XML — задаёт **default** | Нет | Нет | Юзер может toggle через slider |
+| User toggle (slider menu) | Browser localStorage (`optional_fields,<view>,<user>,<view_id>`) | Да | **Нет** (общий для mode'ов) | Юзер сам ставит/снимает |
+
+**Подвох**: localStorage не различает `view_mode`. Если в Bookkeeper'е снять галку с поля у которого есть optional — она снимется и в Logist'е тоже. Решение: для критичных полей режима убрать `optional` (они станут force-visible в нужном mode через column_invisible).
+
+#### 13.12.6. Header формы
+
+В header pedido (Vendor Reference, Payment Terms, Claude AI Finalize Trigger, Expected Arrival, Other Info tab) — **mode не применяется**. Все поля видны в обоих modes.
+
+Решение owner'а 2026-05-09: header не трогаем, mode переключает только line tree visibility.
+
+#### 13.12.7. Pre-existing pedido — bulk migration
+
+Все 184 pedido в системе на момент 2026-05-09 получили `x_studio_view_mode='logist'` через bulk update. Новые pedido автоматически берут `'logist'` через `ir.default 34`.
+
+#### 13.12.8. Future modes — если понадобится
+
+Если потом распределитель или флорист-в-магазине окажутся отдельными ролями — добавляется:
+1. Новое selection value (например `'distributor'`, `'shop'`) в field 27797.
+2. Новая server action (например 1245).
+3. Новая кнопка в header view 4467.
+4. Соответствующие column_invisible expressions для новых полей.
+
+Архитектура расширяемая — но прежде чем добавлять mode стоит проверить что текущие 2 mode'а не покрывают use case (часто distinguishing roles в UX = шум, а не польза).
 
 ---
 
