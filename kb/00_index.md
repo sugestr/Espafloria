@@ -1,4 +1,4 @@
-<!-- v: 5 | updated: 2026-05-08T16:00Z -->
+<!-- v: 6 | updated: 2026-05-10T00:00Z -->
 # 00. Master Index — Espafloria Odoo
 
 **Owner:** Andriy
@@ -98,6 +98,7 @@ kb/
 |---|---|
 | `add/05_migrate_variant_action.py` | Mirror id=1145 (UI trigger v2) |
 | `add/05_migrate_variant_v2.2.py` | Mirror id=1176 (execute v2.2) |
+| `add/05_catalog_migration_handover_2026-05-10.md` | 🚧 Active — handover для resume catalog migration с блока A1 (план A1→A14, locked decisions, A1 progress, open questions) |
 
 ### Блок 07 — state ops
 
