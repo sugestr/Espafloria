@@ -11,6 +11,8 @@ variants_*.csv
 variants_*.xlsx
 *_fix*.csv
 *_fix*.xlsx
+# Exception: migration audit snapshots (явно нужны в репо для трассируемости)
+!pedido.files/migration/holded_*.xlsx
 
 # Session logs (см. CHANGELOG для истории сессий)
 p0_*.log

@@ -1,4 +1,4 @@
-<!-- v: 6 | updated: 2026-05-10T00:00Z -->
+<!-- v: 7 | updated: 2026-05-10T16:00Z -->
 # 00. Master Index — Espafloria Odoo
 
 **Owner:** Andriy
@@ -98,6 +98,7 @@ kb/
 |---|---|
 | `add/05_migrate_variant_action.py` | Mirror id=1145 (UI trigger v2) |
 | `add/05_migrate_variant_v2.2.py` | Mirror id=1176 (execute v2.2) |
+| `add/05_2026-05-10_migration_plan.md` | **Живая карта** переезда каталога: 14 блоков A1-A14, статус, принятые решения, парк. Точка возврата для следующей сессии. |
 
 ### Блок 07 — state ops
 
