@@ -1,11 +1,9 @@
-<!-- v: 5 | updated: 2026-05-10T00:00Z -->
+<!-- v: 6 | updated: 2026-05-10T18:00Z -->
 # 05. Каталог и миграция (v2.2)
 
 **Что в файле:** migration toolkit v2.2 (UI trigger + execute + automation), 4 правила миграции (бывшие §20-23 в старом 99), category tree, ID-registry мигрированных карточек (пусто после reset), validation matrix (исторические тесты toolkit), post-migration procedures, rollback. Структуры карточек и кастомные поля Holded — здесь же.
 
 **Status:** 🟡 READY — каталог обнулён (только нормированные карточки в карантине, 0 мигрированных). Migration toolkit v2.2 верифицирован валидационным набором ниже (§9), готов к новому циклу миграции при появлении target skeletons.
-
-> **🚧 Активная миграция:** идёт дизайн нового каталога по 14-блочному плану A1→A14. Точка входа для следующей сессии — [`add/05_catalog_migration_handover_2026-05-10.md`](add/05_catalog_migration_handover_2026-05-10.md). Триггер «продолжить с блока A1».
 
 ---
 
