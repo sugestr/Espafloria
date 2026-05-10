@@ -1,4 +1,4 @@
-<!-- v: 2 | updated: 2026-05-10T18:30Z -->
+<!-- v: 3 | updated: 2026-05-10T19:30Z -->
 # План миграции каталога Espafloria — снимок 2026-05-10
 
 Snapshot структуры переезда: цели, принципы, карта блоков A1–A14, статус, принятые решения, парк-открытые. Точка возврата для следующей сессии.
@@ -32,8 +32,8 @@ Snapshot структуры переезда: цели, принципы, кар
 | # | Блок | Смысл одной фразой | Статус |
 |---|---|---|---|
 | **A1** | Audit current state | Снять снимок «что есть, чего не хватает», прежде чем что-то проектировать | 🟢 закрыт 2026-05-10 |
-| **A3** | Attribute extraction | Из supplierinfo (codigo Verdnatura + Supplier Identity Key Serviflor) пересобрать структурированные атрибуты на каждой карте | ⬜ TODO (next) |
-| **A4** | Design tree | Нарисовать новое дерево учётной категории + POS-вкладок, опираясь на A3 | ⬜ TODO |
+| **A3** | Attribute extraction | Из supplierinfo (codigo Verdnatura + Supplier Identity Key Serviflor) + name + legacy `x_studio_botanic_name` пересобрать структурированные атрибуты на каждой карте | 🟢 draft 2026-05-10 |
+| **A4** | Design tree | Новое дерево учётной категории + POS-вкладок, семьи карт, variant axes, MIX-tier, migration map | 🟡 v1 draft, на ревью owner |
 | **A5** | Pilot multivariant | Один реальный multivariant (например Rosa Red Naomi 40/50/60) end-to-end через v2.2, проверка процедуры | ⬜ TODO |
 | **A6** | Bulk skeleton + migrate | Создать пустые target template'ы, прогнать миграцию пачками с проверкой каждой пачки | ⬜ TODO |
 | **A7** | Tax + bill_control bulk adjust | Применить решения по `purchase_method` массово на новые карты | ⬜ TODO |
@@ -205,8 +205,20 @@ A1.19.7.5. **Ключевые числа из аудита:**
 
 - [05_catalog.md](../05_catalog.md) — toolkit миграции v2.2 + предыдущая история
 - [05_migrate_variant_v2.2.py](05_migrate_variant_v2.2.py) — mirror действующего скрипта (id=1176)
+- [05_2026-05-10_audit_quarantine.md](05_2026-05-10_audit_quarantine.md) — A1 audit, 8 секций
+- [05_2026-05-10_catalog_design_v1.md](05_2026-05-10_catalog_design_v1.md) — **A4 draft нового каталога v1**, 10 секций
+- `pedido.files/migration/a3_extracted_attributes_2026-05-10.xlsx` — A3 proposed теги/атрибуты per-card
+- `pedido.files/migration/migration_map_2026-05-10.xlsx` — A4 migration map (3 листа)
 - [09_pedido.md](../09_pedido.md) §13 — Mode B workflow логиста (свежее, 2026-05-10)
 - [99_invariants.md](../99_invariants.md) — 5 правил + 13 Odoo 19 gotchas
+
+---
+
+## 9. Что зафиксировано после A3 + A4 v1
+
+A3 готов: 395 карт-кандидатов проанализированы, 544 уникальных тегов предложены (`Genus / Variety / Color / Origin / Treatment / MixTier / PackMode / Light` — все имена чистые без префиксов, различение через `color` hex), 3 variant axes (`Длина (см)` 31 значение / `Размер горшка (см)` 38 значений / `Цвет` 15 значений). 0 custom Studio-полей.
+
+A4 v1 готов на ревью: **312 новых template** (261 flat + 51 multivariant), 134 карт консолидируются → 51 multivariant template (экономия 83), 97 MIX cards распределены по tier (cheap 67 / standard 17 / premium 13), 1745 карт идут в архив при cutover. Confidence: 211 high / 163 medium / 21 low. Top-3 controversial: Tulipa 4-merge, Ficus 11-merge, 23 multi-length conflict — в Open Questions §9 design-документа.
 - [CHANGELOG.md](../../CHANGELOG.md) — журнал, запись 2026-05-10 A1 cleanup
 
 ---

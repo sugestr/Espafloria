@@ -29,6 +29,9 @@ parex_skus.json
 **/post_reset_*.json
 **/tax_audit_*.json
 **/parex_skus.json
+# A4 sub-agent intermediate analytics
+**/_a4_*.json
+**/_a3_*.json
 
 # Python cache
 __pycache__/
