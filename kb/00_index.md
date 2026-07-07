@@ -1,4 +1,4 @@
-<!-- v: 7 | updated: 2026-05-10T16:00Z -->
+<!-- v: 8 | updated: 2026-07-07T00:00Z -->
 # 00. Master Index — Espafloria Odoo
 
 **Owner:** Andriy
@@ -111,6 +111,12 @@ kb/
 | Файл | Назначение |
 |---|---|
 | `add/08_fetch_holded_images_55.py` | One-shot script: fetch + resize Holded images via API |
+
+### Блок 10 — accounting / Q2 close
+
+| Файл | Назначение |
+|---|---|
+| `add/10_q2_close_handover_2026-07-07.md` | **Handover snapshot** для next session (свежая модель). Q2 close status: 82 forwards → 89 drafts → 2 posted + Glories April fixed. 234 orphan BBVA lines. Аудит contabilidad с ~70 pending fixes, sales-side gap правило «неизвестный цветок». Next picklist: batch fix → post → Bank Matching → BBVA↔Holded reconciliation → Modelo 303/111/115 draft до 20 июля. |
 
 ### Блок 09 — pedido / reception
 
