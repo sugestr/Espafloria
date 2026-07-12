@@ -1,4 +1,4 @@
-<!-- v: 2 | updated: 2026-05-10T20:30Z -->
+<!-- v: 3 | updated: 2026-05-10T21:00Z -->
 # Fable 5 task prompt — новый каталог Espafloria + импорт продаж Q2/Q3
 
 Промпт для Fable-агента, запускается в **новой отдельной сессии** через Agent tool (или напрямую как Claude Fable session) с `model: fable`, `subagent_type: general-purpose`, `isolation: worktree` (изоляция файловой системы). Odoo write — с checkpoint-контролем owner'ом на каждой фазе.
@@ -197,18 +197,44 @@ Output:
 Отдельный трек. По ответу owner'а из Phase 0:
 - **Скоуп дат** — Q2 или Q2+Q3-до-сегодня.
 - **Целевые модели** — `pos.order` (POS-чеки Gloria/Blau/Plaza) и/или `sale.order` (онлайн).
-- **Связь с новыми картами** — line.product_id должен указывать на **новые** template variants (из phase 4-5), не на карантинные (они не в POS все равно). Матчинг Holded product → new Odoo template: по SKU/Nombre.
+
+**Dual-catalog routing (КРИТИЧЕСКОЕ УТОЧНЕНИЕ owner'а):** каждая продажная линия из Holded привязывается к разному каталогу в зависимости от **типа товара**:
+
+| Тип товара Holded | Целевой каталог в Odoo | Причина |
+|---|---|---|
+| **FLORES CORTADAS** (срезка) | **Новый каталог** (созданный в phase 4) | Продавали то что покупали — flowers ↔ new catalog |
+| **PLANTAS EN MACETAS** (горшечная) | **Новый каталог** (созданный в phase 4) | Продавали то что покупали — plants ↔ new catalog |
+| **DECORACION Y ADORNOS** (декор) | **Карантинный каталог** (existing carantine cards, categ_id child_of 207) | Твёрдый товар в новый не мигрирует, остаётся в карантине |
+| **JARRONES Y CONTENEDORES** (вазы) | **Карантинный каталог** | Твёрдый товар |
+| **EMBALAJE** (упаковка) | **Карантинный каталог** | Твёрдый товар |
+| **Consumibles** (расходники) | **Карантинный каталог** | Твёрдый товар |
+| **VELAS Y PORTAVELAS** (свечи) | **Карантинный каталог** | Твёрдый товар |
+| **MACETAS PARA PLANTAS** (кашпо/горшки) | **Карантинный каталог** | Твёрдый товар |
+| **PRODUCTOS ESPECIALES** | **Карантинный каталог** | Твёрдый товар (в основном упаковка/сборки) |
+| **ENTREGA** (доставка) | **Карантинный каталог** (уже там как service) | Не мигрирует |
+
+**Как определить тип:** Holded product/salesreceipt line имеет одну из 12 категорий-флагов в экспорте (см. `holded_products_2026-05-10.xlsx` — колонки FLORES CORTADAS / PLANTAS EN MACETAS / DECORACION Y ADORNOS / etc). Для каждой линии смотришь какая колонка ≠ пусто.
+
+**Fallback если товар не найден в целевом каталоге:**
+- Если срезка/горшечка → сначала fuzzy-search в новом каталоге (по имени/SKU/Nombre); если не нашлось → surface в CSV `pedido.files/migration/fable_phase7_unmatched_flowers.csv` для ручного ревью owner'а. Не создавай новую карту в новом каталоге автоматически (это нарушит чистоту нового каталога).
+- Если твёрдый → search в карантине; если не нашлось → surface в CSV. Не создавай в карантине.
+
+**Технический gotcha:** карантинные карты могут иметь `available_in_pos=False`. Для импорта `pos.order.line` штатный POS требует чтобы товар был доступен в POS. Решение:
+- (a) Временно включить `available_in_pos=True` на карантинных картах которые нужны для импорта → импорт → откат (или оставить если бизнес требует).
+- (b) Использовать `sale.order` для всего (не POS) — обходит constraint.
+- (c) SQL-inject `pos.order.line` минуя ORM check.
+- Проверь через docs Odoo 19 и MCP какой вариант жизнеспособен без нарушения G9 (POS config changes require closed sessions).
 
 Sub-фазы:
 - **7.1 Партнёры (клиенты).** Holded contacts type=customer → Odoo `res.partner`. Матч по email/phone/name (case-insensitive). Импорт только тех кто фигурирует в Q2/Q3 продажах.
 - **7.2 POS orders (если applicable).** Holded salesreceipts за скоуп → Odoo `pos.order` через **штатный POS API**:
   - Требует **открытой** `pos.session` для каждого магазина (Gloria/Blau/Plaza).
-  - Создание сессии → импорт orders → закрытие сессии → сверка totals.
-  - Особый gotcha (G9): POS config changes требуют closed sessions. Скорее всего создание order на историческую дату потребует manual state jump или SQL-write — уточни через docs Odoo 19.
-- **7.3 Sale orders (если applicable).** Holded invoices за скоуп → Odoo `sale.order` + `account.move` (invoice). Партнёр из 7.1, линии с product_id новых template'ов, tax_ids по категории.
+  - Создание сессии → импорт orders (line.product_id по dual-catalog routing) → закрытие сессии → сверка totals.
+  - Особый gotcha (G9): POS config changes требуют closed sessions. Уточни через docs Odoo 19 как создать order на историческую дату.
+- **7.3 Sale orders (если applicable).** Holded invoices за скоуп → Odoo `sale.order` + `account.move` (invoice). Партнёр из 7.1, линии с product_id по dual-catalog routing, tax_ids по категории.
 - **7.4 Payments.** Holded payments → Odoo `account.payment`, привязка к соответствующим orders/invoices.
 
-Verify после каждой sub-фазы: сумма Odoo per-магазин должна ± совпадать с Holded (tolerance ±0.5% на округления).
+Verify после каждой sub-фазы: сумма Odoo per-магазин должна ± совпадать с Holded (tolerance ±0.5% на округления). Также verify split «flowers vs hard goods» — сколько revenue пошло на новый каталог vs карантин.
 
 Output:
 - CHANGELOG entries per sub-фаза.
@@ -271,7 +297,12 @@ Owner ревьюит cумму по магазинам, sample orders в UI.
 - **Progress updates** — каждые ~15-30 минут работы, короткие 3-5 строк.
 - **Checkpoints** — детальный отчёт (200-400 слов) с числами и ссылками на файлы.
 - **Errors** — немедленно, с trace + предлагаемый fix.
-- **Uncertainty** — если confidence <60% на любом решении → останавливаешься, спрашиваешь owner'а.
+- **Uncertainty** — если confidence <60% на любом решении → **останавливаешься перед физическим write-действием**, спрашиваешь owner'а. Правило усилено owner'ом:
+  - Формулировка через **бизнес-язык** (что физически произойдёт для флориста / бухгалтера / клиента), не через `x_studio_*` / model names / field ids.
+  - Пример «плохо»: «Установить `available_in_pos=True` на 137 quarantine records с `categ_id child_of 210` для обхода constraint при `pos.order.line.create`?»
+  - Пример «хорошо»: «Чтобы импортировать продажи ваз и упаковки за апрель, нужно временно сделать эти карантинные карточки видимыми в кассе — иначе Odoo не даст создать чек. Могу сделать их видимыми только на время импорта, потом откатить, или оставить видимыми навсегда (они будут появляться в POS для флориста). Как лучше?»
+  - Всегда даёшь **2-3 варианта** с их последствиями для бизнеса, свою рекомендацию, и явно ждёшь выбор.
+  - После получения ответа — фиксируешь решение в CHANGELOG или migration_plan (чтобы не спрашивать повторно).
 - **Language** — русский для отчётов owner'у, английский для code + git.
 
 ## Failure modes и graceful degradation
